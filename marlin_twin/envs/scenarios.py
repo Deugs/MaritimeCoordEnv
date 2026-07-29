@@ -58,6 +58,15 @@ class ScenarioGenerator:
                 else:  # Faster overtaking ship behind
                     start_x, start_y, heading = 0.0, -1000.0, 0.0
                     target_x, target_y = 0.0, 3000.0
+            elif scenario_type == "port_approach":
+                # Converging multi-lane port approach layout
+                sector = i % 3
+                dist = 3000.0 + (i // 3) * 400.0
+                angle = (sector * (2 * np.pi / 3)) + (np.random.rand() - 0.5) * 0.2
+                start_x = float(dist * np.cos(angle))
+                start_y = float(dist * np.sin(angle))
+                heading = float((angle + np.pi) % (2 * np.pi) - np.pi)
+                target_x, target_y = 0.0, 0.0  # All heading to port center
             elif scenario_type == "open_water":
                 angle = 2 * np.pi * i / n_vessels
                 radius = 2000.0
