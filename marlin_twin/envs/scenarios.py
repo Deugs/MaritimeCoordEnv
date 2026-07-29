@@ -37,7 +37,28 @@ class ScenarioGenerator:
                 propeller_diameter=4.0, max_rpm=150.0, rudder_area=20.0
             )
 
-            if scenario_type == "open_water":
+            if scenario_type == "head_on" and n_vessels == 2:
+                if i == 0:
+                    start_x, start_y, heading = 0.0, -2000.0, 0.0  # Heading North
+                    target_x, target_y = 0.0, 2000.0
+                else:
+                    start_x, start_y, heading = 0.0, 2000.0, np.pi  # Heading South
+                    target_x, target_y = 0.0, -2000.0
+            elif scenario_type == "crossing_give_way" and n_vessels == 2:
+                if i == 0:
+                    start_x, start_y, heading = 0.0, -1500.0, 0.0  # Heading North (Own ship)
+                    target_x, target_y = 0.0, 1500.0
+                else:
+                    start_x, start_y, heading = 1500.0, 0.0, -np.pi / 2  # Heading West (On starboard side)
+                    target_x, target_y = -1500.0, 0.0
+            elif scenario_type == "overtaking" and n_vessels == 2:
+                if i == 0:  # Slower target ship ahead
+                    start_x, start_y, heading = 0.0, 500.0, 0.0
+                    target_x, target_y = 0.0, 3000.0
+                else:  # Faster overtaking ship behind
+                    start_x, start_y, heading = 0.0, -1000.0, 0.0
+                    target_x, target_y = 0.0, 3000.0
+            elif scenario_type == "open_water":
                 angle = 2 * np.pi * i / n_vessels
                 radius = 2000.0
                 start_x = float(radius * np.cos(angle))

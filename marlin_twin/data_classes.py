@@ -118,21 +118,21 @@ class VesselDynamics:
     moment_of_inertia: float        # kg*m^2
 
     # Hull hydrodynamics
-    X_u_dot: float = 0.0            # Added mass surge
-    Y_v_dot: float = 0.0            # Added mass sway
-    N_r_dot: float = 0.0            # Added mass yaw
+    X_u_dot: float = -50000.0       # Added mass surge
+    Y_v_dot: float = -100000.0      # Added mass sway
+    N_r_dot: float = -500000.0      # Added mass yaw
 
     # Damping coefficients
-    X_u: float = 0.0                # Surge damping
-    Y_v: float = 0.0                # Sway damping
-    N_r: float = 0.0                # Yaw damping
+    X_u: float = -1000.0            # Surge damping
+    Y_v: float = -5000.0            # Sway damping
+    N_r: float = -20000.0           # Yaw damping
 
     # Propeller
-    propeller_diameter: float = 0.0 # m
-    max_rpm: float = 0.0
+    propeller_diameter: float = 4.0 # m
+    max_rpm: float = 150.0
 
     # Rudder
-    rudder_area: float = 0.0        # m^2
+    rudder_area: float = 20.0       # m^2
     max_rudder_angle: float = np.pi / 6  # 30 degrees
 
     def compute_derivatives(

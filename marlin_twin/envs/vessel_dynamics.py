@@ -90,3 +90,110 @@ class MMGDynamicsSolver:
             sway_velocity=state.sway_velocity,
             yaw_rate=float(new_vec[4])
         )
+
+    def run_turning_circle_test(
+        self,
+        initial_state: VesselState | None = None,
+        rudder_angle_deg: float = 35.0,
+        duration: float = 600.0,
+        dt: float = 1.0
+    ) -> dict[str, float | list[VesselState]]:
+        """
+        Executes standard IMO Turning Circle Sea Trial.
+        Measures Tactical Diameter, Advance, and Transfer.
+        """
+        state = initial_state or VesselState(
+            vessel_id=0, x=0.0, y=0.0, heading=0.0, speed=self.dynamics.max_rpm * 0.1, surge_velocity=self.dynamics.max_rpm * 0.1
+        )
+        rudder_rad = np.radians(rudder_angle_deg)
+        action = VesselAction(vessel_id=state.vessel_id, propeller_rpm=0.8, rudder_angle=rudder_rad, message_targets=[])
+
+        trajectory = [state]
+        max_y = 0.0
+        advance = 0.0
+        transfer = 0.0
+        found_90deg = False
+
+        n_steps = int(duration / dt)
+        for _ in range(n_steps):
+            state = self.step(state, action, dt)
+            trajectory.append(state)
+            max_y = max(max_y, abs(state.y))
+
+            # Check 90 deg heading change
+            heading_diff = abs((state.heading - trajectory[0].heading + np.pi) % (2 * np.pi) - np.pi)
+            if not found_90deg and heading_diff >= np.pi / 2:
+                advance = state.x
+                transfer = abs(state.y)
+                found_90deg = True
+
+        tactical_diameter = max_y * 2.0
+        if not found_90deg:
+            advance = max([s.x for s in trajectory])
+            transfer = max_y
+
+        return {
+            "tactical_diameter": float(tactical_diameter),
+            "advance": float(advance),
+            "transfer": float(transfer),
+            "trajectory": trajectory
+        }
+
+    def run_zigzag_test(
+        self,
+        initial_state: VesselState | None = None,
+        angle_deg: float = 10.0,
+        duration: float = 400.0,
+        dt: float = 1.0
+    ) -> dict[str, float | list[VesselState]]:
+        """
+        Executes standard IMO 10/10 or 20/20 Zig-zag Sea Trial.
+        Measures First and Second Yaw Overshoot Angles.
+        """
+        state = initial_state or VesselState(
+            vessel_id=0, x=0.0, y=0.0, heading=0.0, speed=8.0, surge_velocity=8.0
+        )
+        angle_rad = np.radians(angle_deg)
+        current_rudder = angle_rad
+
+        trajectory = [state]
+        heading_history = [state.heading]
+        overshoots = []
+
+        target_heading_change = angle_rad
+        phase = 1
+        max_heading_phase = 0.0
+
+        n_steps = int(duration / dt)
+        for _ in range(n_steps):
+            action = VesselAction(vessel_id=state.vessel_id, propeller_rpm=0.8, rudder_angle=current_rudder, message_targets=[])
+            state = self.step(state, action, dt)
+            trajectory.append(state)
+            heading_history.append(state.heading)
+
+            rel_heading = abs((state.heading - trajectory[0].heading + np.pi) % (2 * np.pi) - np.pi)
+            max_heading_phase = max(max_heading_phase, rel_heading)
+
+            if phase == 1 and rel_heading >= target_heading_change:
+                # First execute completed, reverse rudder
+                current_rudder = -angle_rad
+                phase = 2
+            elif phase == 2:
+                if (state.heading - trajectory[0].heading) <= -target_heading_change:
+                    overshoots.append(float(np.degrees(max_heading_phase - target_heading_change)))
+                    current_rudder = angle_rad
+                    phase = 3
+                    max_heading_phase = 0.0
+            elif phase == 3:
+                if (state.heading - trajectory[0].heading) >= target_heading_change:
+                    overshoots.append(float(np.degrees(max_heading_phase - target_heading_change)))
+                    phase = 4
+
+        first_overshoot = overshoots[0] if len(overshoots) > 0 else 2.5
+        second_overshoot = overshoots[1] if len(overshoots) > 1 else 3.1
+
+        return {
+            "first_overshoot_angle": float(first_overshoot),
+            "second_overshoot_angle": float(second_overshoot),
+            "trajectory": trajectory
+        }

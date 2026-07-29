@@ -1,0 +1,74 @@
+#!/usr/bin/env python3
+"""
+Phase 1 Validation Script:
+Runs sea trial maneuvers (Turning Circle & 10/10 Zig-zag) and generates validation plots.
+Usage:
+    python scripts/phase1_validation.py
+"""
+
+import os
+import numpy as np
+import matplotlib.pyplot as plt
+from marlin_twin.data_classes import VesselDynamics, VesselType, VesselState
+from marlin_twin.envs.vessel_dynamics import MMGDynamicsSolver
+
+def main():
+    print("=== MARLIN-Twin Phase 1 Validation Suite ===")
+
+    dynamics = VesselDynamics(
+        vessel_id=0, vessel_type=VesselType.CARGO,
+        mass=15000000.0, moment_of_inertia=2e9,
+        max_rpm=150.0, propeller_diameter=4.0
+    )
+    solver = MMGDynamicsSolver(dynamics)
+
+    print("\n1. Running Turning Circle Sea Trial (35 deg rudder)...")
+    tc_results = solver.run_turning_circle_test(rudder_angle_deg=35.0, duration=400.0)
+    print(f"   Tactical Diameter: {tc_results['tactical_diameter']:.2f} m")
+    print(f"   Advance:          {tc_results['advance']:.2f} m")
+    print(f"   Transfer:         {tc_results['transfer']:.2f} m")
+
+    print("\n2. Running 10/10 Zig-zag Sea Trial...")
+    zz_results = solver.run_zigzag_test(angle_deg=10.0, duration=300.0)
+    print(f"   First Overshoot Angle:  {zz_results['first_overshoot_angle']:.2f} deg")
+    print(f"   Second Overshoot Angle: {zz_results['second_overshoot_angle']:.2f} deg")
+
+    # Generate Validation Figure
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+
+    # Plot Turning Circle
+    tc_traj = tc_results["trajectory"]
+    x_tc = [s.x for s in tc_traj]
+    y_tc = [s.y for s in tc_traj]
+    ax1.plot(x_tc, y_tc, 'b-', label="Trajectory (35 deg Rudder)")
+    ax1.set_title("IMO Turning Circle Maneuver", fontweight='bold')
+    ax1.set_xlabel("Easting (m)")
+    ax1.set_ylabel("Northing (m)")
+    ax1.grid(True, linestyle="--", alpha=0.5)
+    ax1.legend()
+    ax1.axis('equal')
+
+    # Plot Zig-zag Heading
+    zz_traj = zz_results["trajectory"]
+    t_zz = np.arange(len(zz_traj))
+    heading_deg = [np.degrees(s.heading) for s in zz_traj]
+    ax2.plot(t_zz, heading_deg, 'r-', label="Heading Angle (deg)")
+    ax2.axhline(10.0, color='k', linestyle=':', label="Rudder Target (+10 deg)")
+    ax2.axhline(-10.0, color='k', linestyle=':', label="Rudder Target (-10 deg)")
+    ax2.set_title("10/10 Zig-zag Maneuver", fontweight='bold')
+    ax2.set_xlabel("Time (s)")
+    ax2.set_ylabel("Heading Angle (deg)")
+    ax2.grid(True, linestyle="--", alpha=0.5)
+    ax2.legend()
+
+    os.makedirs("figures", exist_ok=True)
+    out_path = os.path.join("figures", "phase1_sea_trials.png")
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=300)
+    plt.close()
+
+    print(f"\nValidation plots successfully saved to: {out_path}")
+    print("=== Phase 1 Validation Completed Successfully! ===")
+
+if __name__ == "__main__":
+    main()
