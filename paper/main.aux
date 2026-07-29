@@ -1,0 +1,67 @@
+\relax 
+\citation{zheng2025marl,zhang2025digital_twin_asv}
+\citation{xu2024colregs,wang2025realtime_colregs}
+\citation{tang2023colregs}
+\citation{kim2024swarm,huang2025ais}
+\citation{yu2023mappo,han2023maddpg}
+\citation{sun2025resilience,gu2024resilient_marl}
+\@writefile{toc}{\contentsline {section}{\numberline {1}Introduction}{1}{}\protected@file@percent }
+\citation{wang2025realtime_colregs,tang2023colregs}
+\citation{zheng2025marl,yu2023mappo}
+\citation{lowe2017multi,han2023maddpg}
+\citation{velickovic2018graph,park2025gat}
+\citation{chen2024digitaltwin,chen2025digital_twin_fleet}
+\citation{zhang2023ekf,zhou2024ais_denoising}
+\citation{wu2024ais_outage,huang2025ais}
+\citation{yoshimura2009mmg,fossen2011handbook}
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Overall MARLIN-Twin System Architecture Block Diagram. Raw sensor inputs feed into an onboard EKF/JPDA Digital Twin, which constructs a spatial graph processed by a Multi-Head GAT policy trained via CTDE MAPPO.}}{2}{}\protected@file@percent }
+\newlabel{fig:system_arch}{{1}{2}{}{figure.1}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {2}Related Work}{2}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.1}COLREGs-Compliant Motion Planning}{2}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.2}Multi-Agent Reinforcement Learning in Maritime Autonomy}{2}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.3}Digital Twins and State Estimation under Outages}{2}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {3}3-DOF Hydrodynamic Vessel Model \& Problem Formulation}{2}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.1}3-DOF MMG Vessel Dynamics}{2}{}\protected@file@percent }
+\citation{wang2024mmg,li2023imo}
+\citation{bar-shalom2001tracking,zhang2023ekf}
+\citation{velickovic2018graph,li2025gat_maritime}
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces 3-DOF MMG Hydrodynamic Model Sea Trial Validation against IMO Resolution MSC.137(76) standards (35$^\circ $ Starboard Turning Circle and 10$^\circ $/10$^\circ $ Zig-Zag Maneuver).}}{3}{}\protected@file@percent }
+\newlabel{fig:sea_trials}{{2}{3}{}{figure.2}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Digital Twin EKF/JPDA State Estimation \& Outage Recovery Flowchart. Seamlessly transitions to Dead Reckoning fallback during AIS signal blackouts.}}{3}{}\protected@file@percent }
+\newlabel{fig:flowchart}{{3}{3}{}{figure.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2}POMDP Game Formulation}{3}{}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces EKF/JPDA Digital Twin Trajectory Estimation and Position Tracking Error during a 300s AIS Blackout Event.}}{3}{}\protected@file@percent }
+\newlabel{fig:blackout_tracking}{{4}{3}{}{figure.4}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces Multi-Head GAT Graph Attention Mechanism. Computes edge weights $\alpha _{ij}$ to prioritize high-risk collision threats.}}{3}{}\protected@file@percent }
+\newlabel{fig:gat_diagram}{{5}{3}{}{figure.5}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {4}The MARLIN-Twin Framework}{3}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.1}Digital Twin EKF/JPDA Estimation Engine}{3}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.2}Multi-Head Graph Attention Network (GAT)}{3}{}\protected@file@percent }
+\citation{zhao2024binary}
+\citation{yu2023mappo,schulman2017proximal}
+\citation{han2023maddpg,tang2023colregs}
+\citation{sun2025resilience}
+\citation{chen2024digitaltwin,huang2025ais}
+\@writefile{lof}{\contentsline {figure}{\numberline {6}{\ignorespaces Inter-Vessel Bandwidth Utilization Heatmap Matrix under varying communication quality levels ($\lambda $).}}{4}{}\protected@file@percent }
+\newlabel{fig:bandwidth_heatmap}{{6}{4}{}{figure.6}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.3}128-Bit Payload Binary Protocol}{4}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.4}CTDE MAPPO Training Infrastructure}{4}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {5}Experimental Evaluation}{4}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.1}Training Performance & Convergence}{4}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2}Baseline Algorithm Comparison & Resilience Index}{4}{}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {7}{\ignorespaces 5-Seed Extended Curriculum MAPPO Training Curves with 95\% Confidence Interval Error Bands.}}{4}{}\protected@file@percent }
+\newlabel{fig:extended_training}{{7}{4}{}{figure.7}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {8}{\ignorespaces Baseline Algorithm Coordination Resilience Comparison. MARLIN-Twin maintains $R_{\text  {resilience}} = 1.0000$ across all bandwidth degradation levels ($\lambda $).}}{4}{}\protected@file@percent }
+\newlabel{fig:resilience_benchmark}{{8}{4}{}{figure.8}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.3}Real-World AIS Trajectory Validation}{4}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.4}4-Variant Model Ablation Study}{4}{}\protected@file@percent }
+\bibstyle{IEEEtran}
+\bibdata{references}
+\@writefile{lof}{\contentsline {figure}{\numberline {9}{\ignorespaces Real-World AIS Trajectory Validation during a 300s AIS Blackout Period (543.62m EKF RMSE vs 1069.44m Blackout DR RMSE).}}{5}{}\protected@file@percent }
+\newlabel{fig:real_ais}{{9}{5}{}{figure.9}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {10}{\ignorespaces 4-Variant Model Ablation Study comparing MARLIN-Twin against Mean-Pooling GNN, Flat MLP, and No Digital Twin variants.}}{5}{}\protected@file@percent }
+\newlabel{fig:ablation_study}{{10}{5}{}{figure.10}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces Quantitative Performance Metrics of Ablation Variants}}{5}{}\protected@file@percent }
+\newlabel{tab:ablation_table}{{1}{5}{}{table.1}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {6}Conclusion \& Future Work}{5}{}\protected@file@percent }
+\gdef \@abspage@last{5}
