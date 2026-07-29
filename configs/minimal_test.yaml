@@ -1,0 +1,9 @@
+# MARLIN-Twin Minimal Test Configuration
+n_vessels: 2
+scenario_type: open_water
+n_episodes: 10
+episode_length: 50
+learning_rate: 0.0003
+bandwidth_bps: 9600.0
+dt_enabled: true
+adaptive_bandwidth: true

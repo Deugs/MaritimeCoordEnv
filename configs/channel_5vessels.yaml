@@ -1,0 +1,10 @@
+# MARLIN-Twin Channel 5-Vessels Configuration
+n_vessels: 5
+scenario_type: channel
+n_episodes: 500
+episode_length: 300
+learning_rate: 0.0003
+bandwidth_bps: 9600.0
+dt_enabled: true
+adaptive_bandwidth: true
+test_degradation_levels: [1.0, 0.8, 0.6, 0.4, 0.2, 0.0]
