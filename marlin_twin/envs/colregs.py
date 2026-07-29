@@ -38,8 +38,8 @@ class COLREGsEngine:
             else:
                 return EncounterType.OVERTAKEN, COLREGsRule.RULE_13_OVERTAKING
 
-        # Rule 14: Head-on (reciprocal courses within 5 deg, meeting nearly dead ahead)
-        if abs(rel_bearing) < np.radians(15.0) and abs(rel_heading - np.pi) < np.radians(15.0):
+        # Rule 14: Head-on (reciprocal courses within 15 deg, meeting nearly dead ahead)
+        if abs(rel_bearing) < np.radians(15.0) and abs(abs(rel_heading) - np.pi) < np.radians(15.0):
             return EncounterType.HEAD_ON, COLREGsRule.RULE_14_HEAD_ON
 
         # Rule 15: Crossing
