@@ -59,14 +59,18 @@ class CommunicationChannelManager:
                     delivered.append(msg_delivered)
                     avail_bits -= msg.size_bits
                 else:
-                    msg_failed = MaritimeMessage(
-                        sender_id=msg.sender_id, receiver_id=msg.receiver_id,
-                        content=msg.content, priority=msg.priority, timestamp=msg.timestamp,
-                        size_bits=msg.size_bits, delivered=False
-                    )
-                    remaining.append(msg_failed)
+                    # Message dropped due to noise
+                    remaining.append(msg)
             else:
-                remaining.append(msg)
+                # Message delayed/dropped due to capacity limit
+                if msg.priority == MessagePriority.CRITICAL:
+                    remaining.append(msg)  # Re-queue critical messages
 
         self.channel.message_queue = remaining
         return delivered
+
+    def set_degradation(self, degradation_level: float) -> None:
+        """Set channel capacity degradation level lambda in [0.0, 1.0]."""
+        cap = max(0.0, min(1.0, degradation_level))
+        self.channel.bandwidth_bps = 9600.0 * cap
+        self.channel.packet_loss_rate = 0.05 + 0.90 * (1.0 - cap)

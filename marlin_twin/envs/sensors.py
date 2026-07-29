@@ -42,3 +42,24 @@ class SensorSimulator:
             confidence=0.85,
             associated_vessel=state.vessel_id
         )
+
+    @classmethod
+    def generate_scene_sensors(
+        cls,
+        vessels: dict[int, VesselState],
+        timestamp: float,
+        ais_drop_prob: float = 0.05
+    ) -> tuple[dict[int, AISReading], list[RadarTrack]]:
+        """Generate full sensor readings across all vessels in scene."""
+        ais_readings = {}
+        radar_tracks = []
+
+        for vid, state in vessels.items():
+            ais = cls.generate_ais(state, timestamp, drop_prob=ais_drop_prob)
+            if ais is not None:
+                ais_readings[vid] = ais
+
+            radar = cls.generate_radar(state, timestamp, track_id=1000 + vid)
+            radar_tracks.append(radar)
+
+        return ais_readings, radar_tracks

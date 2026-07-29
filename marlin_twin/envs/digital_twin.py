@@ -24,17 +24,18 @@ class DigitalTwinEstimator:
         scene_id: str,
         timestamp: float,
         actual_states: dict[int, VesselState],
-        ais_readings: list[AISReading],
+        ais_readings: list[AISReading] | dict[int, AISReading],
         radar_tracks: list[RadarTrack]
     ) -> MaritimeDigitalTwin:
         """Update state estimates via EKF and JPDA."""
         new_estimates = {}
 
+        ais_dict = ais_readings if isinstance(ais_readings, dict) else {r.vessel_id: r for r in ais_readings}
+
         for vid, state in actual_states.items():
-            # Check for corresponding AIS reading
-            ais = next((r for r in ais_readings if r.vessel_id == vid), None)
-            
-            if ais and not ais.is_suspect:
+            ais = ais_dict.get(vid)
+
+            if ais and not getattr(ais, 'is_suspect', False):
                 # EKF Update using AIS measurement
                 z = np.array([ais.reported_position[0], ais.reported_position[1], ais.reported_heading, ais.reported_speed])
                 noise = np.random.normal(0, [5.0, 5.0, 0.0087, 0.2])  # ITU-R M.1371 standard noise
@@ -58,11 +59,33 @@ class DigitalTwinEstimator:
                     radar_contribution=0.2,
                     overall_confidence=0.95
                 )
-
             else:
-                # Fallback / JPDA Data Association via Radar or Kinematic Dead Reckoning
+                # JPDA Data Association via Radar Tracks
+                associated_radar = next((rt for rt in radar_tracks if getattr(rt, 'associated_vessel', None) == vid), None)
                 last_est = self.estimates.get(vid)
-                if last_est:
+
+                if associated_radar:
+                    # Radar EKF update
+                    rx, ry = associated_radar.position
+                    vx, vy = associated_radar.velocity
+                    speed = float(np.hypot(vx, vy))
+                    heading = float(np.arctan2(vx, vy))
+
+                    est_state = VesselState(
+                        vessel_id=vid, x=rx, y=ry, heading=heading, speed=speed,
+                        surge_velocity=speed, sway_velocity=0.0, yaw_rate=0.0
+                    )
+                    cov = np.diag([225.0, 225.0, 0.05, 0.25, 0.02, 0.02])
+                    new_estimates[vid] = VesselStateEstimate(
+                        vessel_id=vid,
+                        estimated_state=est_state,
+                        covariance=cov,
+                        estimation_method="jpda_radar",
+                        radar_contribution=0.9,
+                        overall_confidence=0.85
+                    )
+                elif last_est:
+                    # Dead Reckoning Fallback
                     dt = 1.0
                     dr_state = VesselState(
                         vessel_id=vid,
