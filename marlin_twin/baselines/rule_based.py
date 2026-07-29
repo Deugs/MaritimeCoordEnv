@@ -3,7 +3,7 @@
 # ============================================================================
 
 import numpy as np
-from marlin_twin.data_classes import VesselObservation, VesselAction, MessagePriority
+from marlin_twin.data_classes import VesselObservation, VesselAction, MessagePriority, EncounterType
 from marlin_twin.envs.colregs import COLREGsEngine
 
 class RuleBasedCOLREGsController:
@@ -29,9 +29,9 @@ class RuleBasedCOLREGsController:
         if most_dangerous_neighbor and min_cpa < 2000.0:
             enc_type, rule = COLREGsEngine.classify_encounter(own_state, most_dangerous_neighbor, min_cpa)
 
-            if enc_type in [COLREGsEngine.EncounterType.HEAD_ON, COLREGsEngine.EncounterType.CROSSING_GIVE_WAY]:
+            if enc_type in [EncounterType.HEAD_ON, EncounterType.CROSSING_GIVE_WAY]:
                 rudder = np.pi / 12  # Alter course 15 deg to starboard
-            elif enc_type == COLREGsEngine.EncounterType.CROSSING_STAND_ON:
+            elif enc_type == EncounterType.CROSSING_STAND_ON:
                 rudder = 0.0  # Hold course
                 if min_cpa < 300.0:  # Emergency evasion
                     rudder = np.pi / 6

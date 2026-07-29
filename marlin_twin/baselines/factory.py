@@ -16,7 +16,13 @@ class BaselineFactory:
 
     def create(self, algorithm: str) -> dict[int, Policy]:
         n_vessels = self.config.n_vessels
-        if algorithm == "rule_based":
+        if algorithm in ["marlin_twin", "gat"]:
+            from marlin_twin.agents.policies import GATPolicy
+            return {i: GATPolicy() for i in range(n_vessels)}
+        elif algorithm in ["flat_mlp", "mlp"]:
+            from marlin_twin.agents.policies import MLPPolicy
+            return {i: MLPPolicy() for i in range(n_vessels)}
+        elif algorithm == "rule_based":
             return {i: RuleBasedCOLREGsController(i) for i in range(n_vessels)}
         elif algorithm == "independent_ppo":
             return {i: IndependentPPOPolicy() for i in range(n_vessels)}
