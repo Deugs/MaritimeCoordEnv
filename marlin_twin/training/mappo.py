@@ -107,3 +107,22 @@ class MAPPOTrainer(BaseTrainer):
             "colregs_violation_rate": 0.05,
             "communication_utilization": communication_degradation * 0.7
         }
+
+    def save_checkpoint(self, filepath: str) -> None:
+        """Saves PyTorch model state dicts for all policies to a checkpoint file."""
+        import os
+        import torch
+        os.makedirs(os.path.dirname(os.path.abspath(filepath)), exist_ok=True)
+        checkpoint_data = {vid: pol.get_state() for vid, pol in self.policies.items()}
+        torch.save(checkpoint_data, filepath)
+
+    def load_checkpoint(self, filepath: str) -> None:
+        """Loads PyTorch model state dicts from a checkpoint file."""
+        import os
+        import torch
+        if not os.path.exists(filepath):
+            raise FileNotFoundError(f"Checkpoint file not found: {filepath}")
+        checkpoint_data = torch.load(filepath)
+        for vid, state in checkpoint_data.items():
+            if vid in self.policies:
+                self.policies[vid].set_state(state)
