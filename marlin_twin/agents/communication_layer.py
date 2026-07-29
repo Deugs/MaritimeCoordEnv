@@ -24,3 +24,19 @@ class CommunicationLayer:
     def decode_message(message: MaritimeMessage) -> tuple[float, float, float, float]:
         x, y, heading, speed = message.content
         return float(x), float(y), float(heading), float(speed)
+
+    @staticmethod
+    def encode_binary(sender_id: int, receiver_id: int, state: VesselState) -> bytes:
+        """Packs state telemetry into a compact 16-byte (128-bit) binary payload."""
+        import struct
+        # Pack 4 floats (4 * 4 = 16 bytes = 128 bits)
+        return struct.pack("!ffff", state.x, state.y, state.heading, state.speed)
+
+    @staticmethod
+    def decode_binary(payload: bytes) -> tuple[float, float, float, float]:
+        """Unpacks 16-byte (128-bit) binary payload into state telemetry."""
+        import struct
+        if len(payload) != 16:
+            raise ValueError(f"Invalid payload length {len(payload)} bytes (expected 16 bytes)")
+        x, y, heading, speed = struct.unpack("!ffff", payload)
+        return float(x), float(y), float(heading), float(speed)

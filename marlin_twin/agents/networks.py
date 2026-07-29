@@ -30,13 +30,20 @@ class GATEncoder(nn.Module):
 
         self.out_proj = nn.Linear(hidden_dim, hidden_dim)
 
-    def forward(self, x: torch.Tensor, edge_index: torch.Tensor, edge_attr: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self,
+        x: torch.Tensor,
+        edge_index: torch.Tensor,
+        edge_attr: torch.Tensor,
+        return_attention: bool = False
+    ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         # x: [N, in_features], edge_index: [2, E], edge_attr: [E, edge_features]
         N = x.size(0)
         h_node = self.node_proj(x).view(N, self.heads, self.hidden_dim // self.heads)
 
         if edge_index.size(1) == 0:
-            return F.relu(self.out_proj(h_node.view(N, self.hidden_dim)))
+            out = F.relu(self.out_proj(h_node.view(N, self.hidden_dim)))
+            return (out, torch.zeros(0)) if return_attention else out
 
         src, dst = edge_index[0], edge_index[1]
         h_edge = self.edge_proj(edge_attr).view(-1, self.heads, self.hidden_dim // self.heads)
@@ -51,7 +58,8 @@ class GATEncoder(nn.Module):
         out = torch.zeros_like(h_node)
         out.index_add_(0, dst, alpha.unsqueeze(-1) * h_node[src])
 
-        return F.relu(self.out_proj(out.view(N, self.hidden_dim)))
+        h_out = F.relu(self.out_proj(out.view(N, self.hidden_dim)))
+        return (h_out, alpha) if return_attention else h_out
 
 
 class ActorCriticNet(nn.Module):
