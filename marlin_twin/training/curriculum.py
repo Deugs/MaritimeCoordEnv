@@ -5,6 +5,7 @@
 from marlin_twin.data_classes import MaritimeExperimentConfig
 from marlin_twin.api import BaseMaritimeEnvironment, Policy
 from marlin_twin.training.mappo import MAPPOTrainer
+from marlin_twin.agents.vessel_agent import VesselAgentWrapper
 
 class TwoStageCurriculumTrainer(MAPPOTrainer):
     """
@@ -29,7 +30,12 @@ class TwoStageCurriculumTrainer(MAPPOTrainer):
             obs, info = env.reset(seed=2000 + ep)
             done = False
             while not done:
-                actions = {vid: env.get_scene().vessels[vid].last_action for vid in obs}
+                actions = {}
+                for vid, agent_obs in obs.items():
+                    pol = self.policies[vid]
+                    wrapper = VesselAgentWrapper(env.get_scene().vessels[vid], pol)
+                    actions[vid] = wrapper.select_action(agent_obs)
+
                 obs, _, _, done, _ = env.step(actions)
 
         print("Curriculum Training Complete!")

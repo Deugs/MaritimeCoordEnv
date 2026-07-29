@@ -8,6 +8,7 @@ from marlin_twin.api import BaseTrainer, BaseMaritimeEnvironment, Policy
 from marlin_twin.agents.policies import GATPolicy
 from marlin_twin.agents.observation_builder import ObservationBuilder
 from marlin_twin.agents.vessel_agent import VesselAgentWrapper
+from marlin_twin.training.rollout_buffer import RolloutBuffer
 
 class MAPPOTrainer(BaseTrainer):
     """
@@ -25,22 +26,43 @@ class MAPPOTrainer(BaseTrainer):
 
         print(f"[MAPPO] Initialized training loop for {n_vessels} agents over {n_episodes} episodes...")
 
+        buffer = RolloutBuffer(buffer_size=self.config.episode_length, n_agents=n_vessels)
+
         for ep in range(n_episodes):
             obs, info = env.reset(seed=ep)
             done = False
             ep_reward = 0.0
+            buffer.clear()
 
             while not done:
                 actions = {}
+                obs_vecs = []
+                act_vecs = []
+
                 for vid, agent_obs in obs.items():
                     pol = self.policies[vid]
                     wrapper = VesselAgentWrapper(env.get_scene().vessels[vid], pol)
-                    actions[vid] = wrapper.select_action(agent_obs)
+                    act = wrapper.select_action(agent_obs)
+                    actions[vid] = act
+
+                    vec = ObservationBuilder.to_vector(agent_obs)
+                    obs_vecs.append(vec)
+                    act_vecs.append([act.propeller_rpm, act.rudder_angle])
 
                 obs, rewards, team_reward, done, info = env.step(actions)
                 ep_reward += team_reward
 
-            if ep % self.config.eval_frequency == 0:
+                obs_arr = np.array(obs_vecs, dtype=np.float32)
+                act_arr = np.array(act_vecs, dtype=np.float32)
+                rew_arr = np.array([rewards.get(i, 0.0) for i in range(n_vessels)], dtype=np.float32)
+                val_arr = np.zeros(n_vessels, dtype=np.float32)
+                logp_arr = np.zeros(n_vessels, dtype=np.float32)
+
+                buffer.add(obs_arr, act_arr, rew_arr, val_arr, logp_arr)
+
+            buffer.compute_returns_and_advantages(last_values=np.zeros(n_vessels, dtype=np.float32))
+
+            if ep % max(1, self.config.eval_frequency) == 0:
                 print(f"Episode {ep}/{n_episodes} - Team Reward: {ep_reward:.2f}")
 
         return self.policies
