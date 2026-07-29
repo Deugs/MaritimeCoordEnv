@@ -53,8 +53,8 @@ The main contributions of this work are fourfold:
 \begin{enumerate}
     \item \textbf{High-Fidelity 3-DOF MMG Hydrodynamic Engine}: We implement a 3-DOF Manoeuvring Modeling Group (MMG) nonlinear vessel model validated against IMO Resolution MSC.137(76) sea trial standards (Turning Circle and 10$^\circ$/10$^\circ$ Zig-Zag).
     \item \textbf{EKF/JPDA Digital Twin Outage Recovery}: We deploy an onboard state estimation engine that fuses noisy AIS/Radar signals and maintains continuous track estimates during 300s AIS blackouts.
-    \item \textbf{Spatial GAT & 128-Bit Payload Protocol}: We construct dynamic relative observation graphs utilizing Multi-Head GAT attention weights ($\alpha_{ij}$) and serialize messages into a 128-bit binary payload for low-bandwidth mesh channels.
-    \item \textbf{Empirical Resilience & 4-Variant Ablation Study}: Through 5-seed curriculum training and real-world AIS trajectory validation, MARLIN-Twin achieves a perfect Coordination Resilience Index ($R_{\text{resilience}} = 1.0000$), outperforming IPPO, MADDPG, and Rule-Based COLREGs baselines.
+    \item \textbf{Spatial GAT \& 128-Bit Payload Protocol}: We construct dynamic relative observation graphs utilizing Multi-Head GAT attention weights ($\alpha_{ij}$) and serialize messages into a 128-bit binary payload for low-bandwidth mesh channels.
+    \item \textbf{Empirical Resilience \& 4-Variant Ablation Study}: Through 5-seed curriculum training and real-world AIS trajectory validation, MARLIN-Twin achieves a perfect Coordination Resilience Index ($R_{\text{resilience}} = 1.0000$), outperforming IPPO, MADDPG, and Rule-Based COLREGs baselines.
 \end{enumerate}
 
 \section{Related Work}
@@ -147,14 +147,45 @@ To minimize bandwidth consumption, inter-vessel messages are serialized into a 1
 yielding a 93.3\% transmission footprint reduction compared to standard JSON streams \cite{zhao2024binary}.
 
 \subsection{CTDE MAPPO Training Infrastructure}
-We optimize policy $\pi_\theta$ using MAPPO with Generalized Advantage Estimation (GAE, $\gamma=0.99, \lambda_{\text{gae}}=0.95$) \cite{yu2023mappo, schulman2017proximal}. A 2-stage curriculum is employed:
+We optimize joint policy $\pi_\theta$ using Centralized Training with Decentralized Execution (CTDE) MAPPO with Generalized Advantage Estimation (GAE, $\gamma=0.99, \lambda_{\text{gae}}=0.95$) \cite{yu2023mappo, schulman2017proximal}. The clipped surrogate objective for each agent $i$ is formulated as:
+\begin{equation}
+L^{\text{CLIP}}(\theta) = \hat{\mathbb{E}}_t \left[ \min\left(r_t(\theta)\hat{A}_t^{\text{GAE}}, \text{clip}(r_t(\theta), 1-\epsilon, 1+\epsilon)\hat{A}_t^{\text{GAE}}\right) \right]
+\end{equation}
+where $r_t(\theta) = \frac{\pi_\theta(a_{i,t}|o_{i,t})}{\pi_{\theta_{\text{old}}}(a_{i,t}|o_{i,t})}$ is the probability ratio and $\epsilon = 0.2$ is the clipping parameter.
+
+A 2-stage curriculum is employed during training:
 \begin{itemize}
     \item \textbf{Stage 1 (Episodes 1--300)}: Spatial COLREGs pre-training under clean communication ($\lambda = 1.0$).
     \item \textbf{Stage 2 (Episodes 301--500)}: Communication loss resilience fine-tuning under stochastic degradation ($\lambda \in [0.0, 1.0]$).
 \end{itemize}
 
+Table \ref{tab:hyperparams} details the vessel parameters and MAPPO hyperparameters used across all experiments.
+
+\begin{table}[t]
+\caption{ASV Hydrodynamic Coefficients \& MAPPO Hyperparameters}
+\label{tab:hyperparams}
+\centering
+\begin{tabular}{llc}
+\toprule
+\textbf{Parameter Category} & \textbf{Parameter Symbol / Name} & \textbf{Value} \\
+\midrule
+\multirow{4}{*}{3-DOF MMG Dynamics} & Vessel Length ($L$) & 38.0 m \\
+ & Displacement Mass ($m$) & $2.5 \times 10^5$ kg \\
+ & Added Mass ($m_x, m_y$) & $0.1m, 0.4m$ \\
+ & Max Propeller RPM ($n_{\text{max}}$) & 300 RPM \\
+ & Max Rudder Angle ($\delta_{\text{max}}$) & $\pm 35.0^\circ$ \\
+\midrule
+\multirow{5}{*}{MAPPO / GAT Setup} & Discount Factor ($\gamma$) & 0.99 \\
+ & GAE Parameter ($\lambda_{\text{gae}}$) & 0.95 \\
+ & PPO Clip Ratio ($\epsilon$) & 0.20 \\
+ & GAT Attention Heads ($K$) & 4 \\
+ & Binary Payload Size & 128 bits \\
+\bottomrule
+\end{tabular}
+\end{table}
+
 \section{Experimental Evaluation}
-\subsection{Training Performance & Convergence}
+\subsection{Training Performance \& Convergence}
 We train MARLIN-Twin across 5 independent random seeds. Fig. \ref{fig:extended_training} shows policy convergence with 95\% confidence interval error bands, demonstrating rapid adaptation during Stage 2 curriculum transition at episode 300.
 
 \begin{figure}[t]
@@ -164,7 +195,7 @@ We train MARLIN-Twin across 5 independent random seeds. Fig. \ref{fig:extended_t
 \label{fig:extended_training}
 \end{figure}
 
-\subsection{Baseline Algorithm Comparison & Resilience Index}
+\subsection{Baseline Algorithm Comparison \& Resilience Index}
 We benchmark MARLIN-Twin against IPPO, MADDPG, and Rule-Based COLREGs \cite{han2023maddpg, tang2023colregs}. We evaluate the Coordination Resilience Index $R_{\text{resilience}}$ \cite{sun2025resilience}:
 \begin{equation}
 R_{\text{resilience}} = \frac{\int_{0}^{1} J(\lambda) \, d\lambda}{J(1.0)}
