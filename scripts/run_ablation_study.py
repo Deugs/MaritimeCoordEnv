@@ -68,7 +68,7 @@ def main():
     ablation_results = {v: [] for v in variants}
     ablation_stds = {v: [] for v in variants}
 
-    config = MaritimeExperimentConfig(scenario_type="head_on", n_vessels=2, episode_length=60)
+    config = MaritimeExperimentConfig(scenario_type="head_on", n_vessels=2, episode_length=300)
 
     print("\n1. Running Empirical Evaluation Sweeps across 4 Ablation Variants...")
     for var in variants:

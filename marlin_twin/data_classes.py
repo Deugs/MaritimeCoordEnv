@@ -146,10 +146,12 @@ class VesselDynamics:
         v = state.sway_velocity
         r = state.yaw_rate
 
-        # Surge equation
-        X = (self.X_u_dot * u + self.X_u * u * abs(u) + 
-             propeller_rpm * self.propeller_diameter * 0.1)
-        du = X / max(self.mass, 1.0)
+        # Surge equation (MMG added mass & propeller thrust)
+        effective_mass = max(self.mass - self.X_u_dot, 1.0)
+        n_rps = (propeller_rpm * self.max_rpm) / 60.0
+        thrust = (n_rps ** 2) * (self.propeller_diameter ** 4) * 0.05
+        drag = self.X_u * u * abs(u)
+        du = (thrust + drag) / effective_mass
 
         # Sway equation
         Y = (self.Y_v_dot * v + self.Y_v * v * abs(v) + 
@@ -161,9 +163,9 @@ class VesselDynamics:
              rudder_angle * self.rudder_area * u * u * 0.3)
         dr = N / max(self.moment_of_inertia, 1.0)
 
-        # Kinematics
-        dx = u * np.cos(state.heading) - v * np.sin(state.heading)
-        dy = u * np.sin(state.heading) + v * np.cos(state.heading)
+        # Kinematics (Nautical Convention: 0=North/+Y, pi/2=East/+X)
+        dx = u * np.sin(state.heading) + v * np.cos(state.heading)
+        dy = u * np.cos(state.heading) - v * np.sin(state.heading)
         dheading = r
 
         return dx, dy, dheading, du, dr

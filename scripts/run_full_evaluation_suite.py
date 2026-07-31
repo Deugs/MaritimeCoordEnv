@@ -58,7 +58,7 @@ def main():
         for lam in degradation_levels:
             scores = []
             for seed in eval_seeds:
-                config = MaritimeExperimentConfig(scenario_type="head_on", n_vessels=2, episode_length=50)
+                config = MaritimeExperimentConfig(scenario_type="head_on", n_vessels=2, episode_length=300)
                 env = MaritimeCoordEnv(config)
                 env.set_communication_degradation(lam)
 
@@ -149,7 +149,7 @@ def main():
         for model in models:
             scores = []
             for seed in eval_seeds:
-                config = MaritimeExperimentConfig(scenario_type=scen, n_vessels=2, episode_length=50)
+                config = MaritimeExperimentConfig(scenario_type=scen, n_vessels=2, episode_length=300)
                 env = MaritimeCoordEnv(config)
 
                 if model == "marlin_twin":
