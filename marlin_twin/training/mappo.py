@@ -3,6 +3,8 @@
 # ============================================================================
 
 import numpy as np
+import torch
+import torch.nn as nn
 from marlin_twin.data_classes import MaritimeExperimentConfig
 from marlin_twin.api import BaseTrainer, BaseMaritimeEnvironment, Policy
 from marlin_twin.agents.policies import GATPolicy
@@ -13,18 +15,19 @@ from marlin_twin.training.rollout_buffer import RolloutBuffer
 class MAPPOTrainer(BaseTrainer):
     """
     Multi-Agent Proximal Policy Optimization (MAPPO) Trainer.
-    Supports Centralized Critic with Decentralized Actors (CTDE).
+    Supports Centralized Critic with Decentralized Actors (CTDE) and PPO gradient updates.
     """
 
     def __init__(self, config: MaritimeExperimentConfig):
         super().__init__(config)
+        self.reward_history = []
 
     def train(self, env: BaseMaritimeEnvironment, n_episodes: int) -> dict[int, Policy]:
         n_vessels = self.config.n_vessels
         if not self.policies:
             self.policies = {i: GATPolicy() for i in range(n_vessels)}
 
-        print(f"[MAPPO] Initialized training loop for {n_vessels} agents over {n_episodes} episodes...")
+        print(f"[MAPPO] Initialized PPO gradient training loop for {n_vessels} agents over {n_episodes} episodes...")
 
         buffer = RolloutBuffer(buffer_size=self.config.episode_length, n_agents=n_vessels)
 
@@ -38,6 +41,8 @@ class MAPPOTrainer(BaseTrainer):
                 actions = {}
                 obs_vecs = []
                 act_vecs = []
+                val_vecs = []
+                logp_vecs = []
 
                 for vid, agent_obs in obs.items():
                     pol = self.policies[vid]
@@ -46,8 +51,12 @@ class MAPPOTrainer(BaseTrainer):
                     actions[vid] = act
 
                     vec = ObservationBuilder.to_vector(agent_obs)
+                    act_arr, val, logp = pol.get_action_and_val(vec)
+
                     obs_vecs.append(vec)
                     act_vecs.append([act.propeller_rpm, act.rudder_angle])
+                    val_vecs.append(val)
+                    logp_vecs.append(logp)
 
                 obs, rewards, team_reward, done, info = env.step(actions)
                 ep_reward += team_reward
@@ -55,14 +64,42 @@ class MAPPOTrainer(BaseTrainer):
                 obs_arr = np.array(obs_vecs, dtype=np.float32)
                 act_arr = np.array(act_vecs, dtype=np.float32)
                 rew_arr = np.array([rewards.get(i, 0.0) for i in range(n_vessels)], dtype=np.float32)
-                val_arr = np.zeros(n_vessels, dtype=np.float32)
-                logp_arr = np.zeros(n_vessels, dtype=np.float32)
+                val_arr = np.array(val_vecs, dtype=np.float32)
+                logp_arr = np.array(logp_vecs, dtype=np.float32)
 
                 buffer.add(obs_arr, act_arr, rew_arr, val_arr, logp_arr)
 
             buffer.compute_returns_and_advantages(last_values=np.zeros(n_vessels, dtype=np.float32))
+            self.reward_history.append(ep_reward)
 
-            if ep % max(1, self.config.eval_frequency) == 0:
+            # PPO Gradient Update step
+            for vid in range(n_vessels):
+                pol = self.policies[vid]
+                if hasattr(pol, "optimizer") and hasattr(pol, "evaluate_tensors"):
+                    obs_t = torch.tensor(buffer.obs_buf[:buffer.ptr, vid], dtype=torch.float32)
+                    act_t = torch.tensor(buffer.act_buf[:buffer.ptr, vid], dtype=torch.float32)
+                    ret_t = torch.tensor(buffer.ret_buf[:buffer.ptr, vid], dtype=torch.float32).unsqueeze(-1)
+                    adv_t = torch.tensor(buffer.adv_buf[:buffer.ptr, vid], dtype=torch.float32).unsqueeze(-1)
+                    old_logp_t = torch.tensor(buffer.logp_buf[:buffer.ptr, vid], dtype=torch.float32).unsqueeze(-1)
+
+                    for _ in range(4):  # PPO update epochs
+                        values, log_probs, entropy = pol.evaluate_tensors(obs_t, act_t)
+                        ratios = torch.exp(log_probs - old_logp_t)
+
+                        surr1 = ratios * adv_t
+                        surr2 = torch.clamp(ratios, 1.0 - 0.2, 1.0 + 0.2) * adv_t
+                        actor_loss = -torch.min(surr1, surr2).mean()
+                        critic_loss = nn.MSELoss()(values, ret_t)
+                        entropy_loss = -entropy.mean()
+
+                        loss = actor_loss + 0.5 * critic_loss + 0.01 * entropy_loss
+
+                        pol.optimizer.zero_grad()
+                        loss.backward()
+                        nn.utils.clip_grad_norm_(pol.net.parameters(), max_norm=0.5)
+                        pol.optimizer.step()
+
+            if ep % max(1, self.config.eval_frequency) == 0 or ep == n_episodes - 1:
                 print(f"Episode {ep}/{n_episodes} - Team Reward: {ep_reward:.2f}")
 
         return self.policies

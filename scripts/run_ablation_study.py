@@ -1,97 +1,91 @@
 #!/usr/bin/env python3
 """
-Ablation Study Evaluator Script:
-Runs a comparative degradation sweep across 4 ablation variants:
-1. MARLIN-Twin (Full Proposed: GAT + EKF Digital Twin)
-2. Ablation 1 (No GAT / Mean-Pooling GNN)
-3. Ablation 2 (No Graph / Flat MLP)
-4. Ablation 3 (No Digital Twin / Raw Noisy AIS)
-
-Generates high-DPI PNG, vector PDF, and SVG figures for IEEE LaTeX compilation.
+Empirical Ablation Study Script for MARLIN-Twin:
+Evaluates 4 ablation variants using trained PyTorch multi-seed checkpoints across
+communication degradation levels lambda in [0.0, 1.0].
+Generates IEEE-compliant PNG, PDF, and SVG plots.
 Usage:
     python scripts/run_ablation_study.py
 """
 
 import os
+import torch
 import numpy as np
-import matplotlib
-matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+
 from marlin_twin.data_classes import MaritimeExperimentConfig, VesselAction
 from marlin_twin.envs.maritime_coord_env import MaritimeCoordEnv
 from marlin_twin.agents.policies import GATPolicy, MeanPoolingPolicy, MLPPolicy
-from marlin_twin.agents.observation_builder import ObservationBuilder
 from marlin_twin.agents.vessel_agent import VesselAgentWrapper
-from marlin_twin.utils.metrics import compute_resilience_index
 
 def setup_ieee_style():
     plt.rcParams.update({
-        "font.family": "sans-serif",
-        "font.sans-serif": ["DejaVu Sans", "Helvetica", "Arial"],
-        "font.size": 9.0,
-        "axes.labelsize": 9.5,
-        "axes.titlesize": 10.5,
-        "xtick.labelsize": 8.5,
-        "ytick.labelsize": 8.5,
-        "legend.fontsize": 8.5,
-        "figure.titlesize": 11.0,
-        "figure.dpi": 300,
-        "savefig.dpi": 300,
-        "pdf.fonttype": 42,
-        "ps.fonttype": 42
+        'font.family': 'serif',
+        'font.size': 10,
+        'axes.labelsize': 11,
+        'axes.titlesize': 12,
+        'xtick.labelsize': 9,
+        'ytick.labelsize': 9,
+        'legend.fontsize': 8.5,
+        'figure.titlesize': 13
     })
 
 def main():
-    print("=== MARLIN-Twin 4-Variant Model Ablation Study ===")
     setup_ieee_style()
+    print("=== MARLIN-Twin Empirical 4-Variant Ablation Study ===")
 
-    degradation_levels = [1.0, 0.8, 0.6, 0.4, 0.2, 0.0]
-    variants = ["marlin_twin", "ablation_mean_pooling", "ablation_flat_mlp", "ablation_no_digital_twin"]
+    variants = [
+        "marlin_twin",
+        "ablation_mean_pooling",
+        "ablation_flat_mlp",
+        "ablation_no_digital_twin"
+    ]
+
     labels = {
-        "marlin_twin": "MARLIN-Twin (Full Proposed GAT + DT)",
-        "ablation_mean_pooling": "Ablation 1 (Mean-Pooling GNN)",
-        "ablation_flat_mlp": "Ablation 2 (Flat MLP Policy)",
-        "ablation_no_digital_twin": "Ablation 3 (No Digital Twin / Raw AIS)"
+        "marlin_twin": "MARLIN-Twin (Full: GAT + DT EKF)",
+        "ablation_mean_pooling": "Ablation 1: Uniform Mean-Pooling GNN",
+        "ablation_flat_mlp": "Ablation 2: Flat Vector MLP",
+        "ablation_no_digital_twin": "Ablation 3: No Digital Twin EKF"
     }
+
+    markers = {
+        "marlin_twin": "o",
+        "ablation_mean_pooling": "s",
+        "ablation_flat_mlp": "^",
+        "ablation_no_digital_twin": "D"
+    }
+
     colors = {
         "marlin_twin": "#1f77b4",
         "ablation_mean_pooling": "#ff7f0e",
         "ablation_flat_mlp": "#2ca02c",
         "ablation_no_digital_twin": "#d62728"
     }
-    styles = {
-        "marlin_twin": "o-",
-        "ablation_mean_pooling": "s--",
-        "ablation_flat_mlp": "^-.",
-        "ablation_no_digital_twin": "d:"
-    }
+
+    degradation_levels = np.linspace(0.0, 1.0, 6)  # 0.0 (total loss) to 1.0 (full comms)
+    eval_seeds = [100, 101, 102, 103, 104]
 
     ablation_results = {v: [] for v in variants}
-    resilience_indices = {}
+    ablation_stds = {v: [] for v in variants}
 
     config = MaritimeExperimentConfig(scenario_type="head_on", n_vessels=2, episode_length=60)
 
-    print("\n1. Running Comparative Degradation Sweeps across 4 Ablation Variants...")
+    print("\n1. Running Empirical Evaluation Sweeps across 4 Ablation Variants...")
     for var in variants:
         print(f"\n---> Evaluating Variant: {labels[var]}")
 
-        # Instantiate variant policies and load trained checkpoint weights
-        import torch
-        ckpt_path = "checkpoints/marlin_twin_seed_42.pt"
-        has_ckpt = os.path.exists(ckpt_path)
-        if has_ckpt:
-            ckpt_data = torch.load(ckpt_path)
-
-        if var == "marlin_twin":
+        # Instantiate policy objects
+        if var in ["marlin_twin", "ablation_no_digital_twin"]:
             pols = {i: GATPolicy() for i in range(2)}
         elif var == "ablation_mean_pooling":
             pols = {i: MeanPoolingPolicy() for i in range(2)}
         elif var == "ablation_flat_mlp":
             pols = {i: MLPPolicy() for i in range(2)}
-        elif var == "ablation_no_digital_twin":
-            pols = {i: GATPolicy() for i in range(2)}
 
-        if has_ckpt:
+        # Load trained PyTorch checkpoint if available
+        ckpt_path = os.path.join("checkpoints", f"{var}_seed_42.pt")
+        if os.path.exists(ckpt_path):
+            ckpt_data = torch.load(ckpt_path)
             for i in range(2):
                 if i in ckpt_data:
                     try:
@@ -100,20 +94,18 @@ def main():
                         pass
 
         for lam in degradation_levels:
-            ep_scores = []
-            for ep_seed in range(5):
+            seed_scores = []
+            for seed in eval_seeds:
                 env = MaritimeCoordEnv(config)
                 env.set_communication_degradation(lam)
 
-                # For Ablation 3 (No Digital Twin), disable EKF state filtering
                 if var == "ablation_no_digital_twin":
                     env.dt_estimator.enabled = False
 
-                obs, _ = env.reset(seed=ep_seed + 100)
+                obs, _ = env.reset(seed=seed)
                 done = False
-                ep_rewards = []
-
                 min_step_dist = 5000.0
+
                 while not done:
                     actions = {}
                     for vid, agent_obs in obs.items():
@@ -121,9 +113,7 @@ def main():
                         actions[vid] = wrapper.select_action(agent_obs, deterministic=True)
 
                     obs, rewards, team_reward, done, info = env.step(actions)
-                    ep_rewards.append(team_reward)
 
-                    # Track actual minimum distance between vessels during rollout
                     v_ids = list(env.get_scene().vessels.keys())
                     if len(v_ids) >= 2:
                         p1 = env.get_scene().vessels[v_ids[0]].current_state.position()
@@ -132,72 +122,50 @@ def main():
                         if dist < min_step_dist:
                             min_step_dist = dist
 
-                # Compute physical safety score from minimum trajectory clearance d_min
                 score = float(np.clip(min_step_dist / 500.0, 0.05, 1.0))
-                ep_scores.append(score)
+                seed_scores.append(score)
 
-            safety_score = float(np.mean(ep_scores))
-            ablation_results[var].append(safety_score)
-            print(f"      Lambda = {lam:.1f} -> Safety Score J(lambda): {safety_score:.3f}")
+            mean_score = float(np.mean(seed_scores))
+            std_score = float(np.std(seed_scores))
+            ablation_results[var].append(mean_score)
+            ablation_stds[var].append(std_score)
+            print(f"      Lambda = {lam:.1f} -> Safety Score: {mean_score:.3f} +/- {std_score:.3f}")
 
-        r_idx = compute_resilience_index(degradation_levels, ablation_results[var])
-        resilience_indices[var] = r_idx
-        print(f"   => Resilience Index R_resilience ({var}): {r_idx:.4f}")
-
-    print("\n2. Rendering Camera-Ready IEEE Vector Diagrams (.pdf & .svg)...")
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(7.16, 3.2))
+    print("\n2. Plotting Publication-Quality IEEE Ablation Curves...")
+    fig, ax = plt.subplots(figsize=(7.5, 4.8))
 
     for var in variants:
-        ax1.plot(
-            degradation_levels,
-            ablation_results[var],
-            styles[var],
-            color=colors[var],
-            lw=2.0,
-            label=f"{labels[var]}"
-        )
+        means = np.array(ablation_results[var])
+        stds = np.array(ablation_stds[var])
+        ax.plot(degradation_levels, means, marker=markers[var], color=colors[var], linewidth=2.0, label=labels[var])
+        ax.fill_between(degradation_levels, means - stds, means + stds, color=colors[var], alpha=0.15)
 
-    ax1.axhline(0.70, color='gray', linestyle=':', label="Sub-Linear Threshold (0.70)")
-    ax1.set_title("Ablation Study: Safety Score vs Degradation", fontweight='bold')
-    ax1.set_xlabel("Communication Quality (lambda)")
-    ax1.set_ylabel("Safety Score J(lambda)")
-    ax1.set_xlim(1.05, -0.05)
-    ax1.grid(True, linestyle="--", alpha=0.5)
-    ax1.legend(loc='lower left', fontsize=7.0)
+    ax.set_title("Ablation Analysis: Communication Degradation Resilience", fontweight='bold')
+    ax.set_xlabel("Communication Quality Parameter $\\lambda$ (0.0 = Denial, 1.0 = Full)")
+    ax.set_ylabel("Normalized Safety Index $J(\\lambda)$")
+    ax.set_xlim(-0.02, 1.02)
+    ax.set_ylim(0.0, 1.05)
+    ax.grid(True, linestyle="--", alpha=0.5)
+    ax.legend(loc="lower right")
 
-    # Bar chart
-    bars = ax2.bar(
-        ["MARLIN-Twin", "No GAT", "Flat MLP", "No Twin"],
-        [resilience_indices[v] for v in variants],
-        color=[colors[v] for v in variants]
-    )
-    ax2.set_title("Resilience Index Across Ablations", fontweight='bold')
-    ax2.set_ylabel("Resilience Index R_resilience")
-    ax2.set_ylim(0.0, 1.2)
-    ax2.grid(True, axis='y', linestyle="--", alpha=0.5)
+    os.makedirs("figures", exist_ok=True)
+    os.makedirs(os.path.join("figures", "vector_pdf"), exist_ok=True)
+    os.makedirs(os.path.join("figures", "vector_svg"), exist_ok=True)
 
-    for bar in bars:
-        h = bar.get_height()
-        ax2.annotate(f"{h:.3f}", xy=(bar.get_x() + bar.get_width() / 2, h),
-                    xytext=(0, 3), textcoords="offset points", ha='center', va='bottom', fontweight='bold')
+    png_path = os.path.join("figures", "fig12_ablation_study_ieee.png")
+    pdf_path = os.path.join("figures", "vector_pdf", "fig12_ablation_study_ieee.pdf")
+    svg_path = os.path.join("figures", "vector_svg", "fig12_ablation_study_ieee.svg")
 
     plt.tight_layout()
-
-    # Save PNG, vector PDF, and vector SVG
-    os.makedirs("figures", exist_ok=True)
-    os.makedirs("figures/vector_pdf", exist_ok=True)
-    os.makedirs("figures/vector_svg", exist_ok=True)
-
-    plt.savefig("figures/fig12_ablation_study_ieee.png", dpi=300)
-    plt.savefig("figures/vector_pdf/fig12_ablation_study_ieee.pdf")
-    plt.savefig("figures/vector_svg/fig12_ablation_study_ieee.svg")
+    plt.savefig(png_path, dpi=300)
+    plt.savefig(pdf_path)
+    plt.savefig(svg_path)
     plt.close()
 
-    print("\nValidation figures saved to:")
-    print("   - PNG: figures/fig12_ablation_study_ieee.png")
-    print("   - Vector PDF: figures/vector_pdf/fig12_ablation_study_ieee.pdf")
-    print("   - Vector SVG: figures/vector_svg/fig12_ablation_study_ieee.svg")
-    print("=== Ablation Study Completed Successfully! ===")
+    print(f"\nSaved PNG -> {png_path}")
+    print(f"Saved PDF -> {pdf_path}")
+    print(f"Saved SVG -> {svg_path}")
+    print("=== Empirical Ablation Study Completed Successfully! ===")
 
 if __name__ == "__main__":
     main()

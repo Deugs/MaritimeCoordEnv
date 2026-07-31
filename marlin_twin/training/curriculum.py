@@ -24,19 +24,9 @@ class TwoStageCurriculumTrainer(MAPPOTrainer):
 
         print(f"\n--- STAGE 2: Bandwidth Allocation & Resilience Fine-Tuning ({stage2_episodes} episodes) ---")
         for ep in range(stage2_episodes):
-            deg_level = max(0.1, 1.0 - 0.9 * (ep / stage2_episodes))
+            deg_level = max(0.1, 1.0 - 0.9 * (ep / max(1, stage2_episodes)))
             env.set_communication_degradation(deg_level)
-
-            obs, info = env.reset(seed=2000 + ep)
-            done = False
-            while not done:
-                actions = {}
-                for vid, agent_obs in obs.items():
-                    pol = self.policies[vid]
-                    wrapper = VesselAgentWrapper(env.get_scene().vessels[vid], pol)
-                    actions[vid] = wrapper.select_action(agent_obs)
-
-                obs, _, _, done, _ = env.step(actions)
+            self.train(env, 1)
 
         print("Curriculum Training Complete!")
         return self.policies
