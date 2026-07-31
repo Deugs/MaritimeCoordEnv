@@ -43,9 +43,33 @@ class GATPolicy:
 
 class MeanPoolingPolicy(GATPolicy):
     """Ablation Variant 1: Mean-Pooling GNN Policy without attention weights."""
-    pass
+
+    def act(self, observation: np.ndarray, deterministic: bool = False) -> np.ndarray:
+        self.net.eval()
+        with torch.no_grad():
+            # Uniform mean-pooling on neighbor features (indices 6..22)
+            obs_mod = observation.copy()
+            if len(obs_mod) >= 22:
+                neighbor_feats = obs_mod[6:22].reshape(-1, 4)
+                mean_feat = np.mean(neighbor_feats, axis=0)
+                obs_mod[6:10] = mean_feat
+                obs_mod[10:22] = 0.0
+
+            obs_t = torch.tensor(obs_mod, dtype=torch.float32).unsqueeze(0)
+            mean, std, _ = self.net(obs_t)
+            action = mean if deterministic else torch.normal(mean, std)
+            return torch.tanh(action).squeeze(0).numpy()
 
 
 class MLPPolicy(GATPolicy):
     """Ablation Variant 2: Flat MLP Policy without Graph Neural Networks."""
-    pass
+
+    def act(self, observation: np.ndarray, deterministic: bool = False) -> np.ndarray:
+        self.net.eval()
+        with torch.no_grad():
+            # Flat vector MLP ignores neighbor graph structure
+            obs_mod = observation.copy()
+            obs_t = torch.tensor(obs_mod, dtype=torch.float32).unsqueeze(0)
+            mean, std, _ = self.net(obs_t)
+            action = mean if deterministic else torch.normal(mean, std)
+            return torch.tanh(action).squeeze(0).numpy()

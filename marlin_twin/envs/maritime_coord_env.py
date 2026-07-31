@@ -78,7 +78,8 @@ class MaritimeCoordEnv(BaseMaritimeEnvironment):
             new_states[vid] = new_state
 
         # Step 2: Sensors & Digital Twin Update
-        ais_readings = [SensorSimulator.generate_ais(s, float(self.time_step)) for s in new_states.values()]
+        drop_prob = float(np.clip(1.0 - self.comms_degradation_level, 0.0, 0.98))
+        ais_readings = [SensorSimulator.generate_ais(s, float(self.time_step), drop_prob=drop_prob) for s in new_states.values()]
         ais_readings = [r for r in ais_readings if r is not None]
         radar_tracks = [SensorSimulator.generate_radar(s, float(self.time_step), idx) for idx, s in enumerate(new_states.values())]
         
@@ -137,8 +138,19 @@ class MaritimeCoordEnv(BaseMaritimeEnvironment):
 
     def _build_observations(self) -> dict[int, VesselObservation]:
         obs = {}
+        dt_estimates = self.scene.digital_twin.vessel_estimates if self.scene and self.scene.digital_twin else {}
+
         for vid, ag in self.scene.vessels.items():
-            neighbors = {other_id: other.current_state for other_id, other in self.scene.vessels.items() if other_id != vid}
+            neighbors = {}
+            for other_id, other in self.scene.vessels.items():
+                if other_id == vid:
+                    continue
+                # Use Digital Twin estimated state if available, else true state
+                if other_id in dt_estimates and dt_estimates[other_id].estimated_state:
+                    neighbors[other_id] = dt_estimates[other_id].estimated_state
+                else:
+                    neighbors[other_id] = other.current_state
+
             intents = {other_id: other.current_route for other_id, other in self.scene.vessels.items() if other_id != vid}
             comm_quality = {other_id: self.comms_degradation_level for other_id in neighbors}
 

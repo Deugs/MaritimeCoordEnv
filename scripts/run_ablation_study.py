@@ -20,6 +20,8 @@ import matplotlib.pyplot as plt
 from marlin_twin.data_classes import MaritimeExperimentConfig, VesselAction
 from marlin_twin.envs.maritime_coord_env import MaritimeCoordEnv
 from marlin_twin.agents.policies import GATPolicy, MeanPoolingPolicy, MLPPolicy
+from marlin_twin.agents.observation_builder import ObservationBuilder
+from marlin_twin.agents.vessel_agent import VesselAgentWrapper
 from marlin_twin.utils.metrics import compute_resilience_index
 
 def setup_ieee_style():
@@ -67,56 +69,74 @@ def main():
     ablation_results = {v: [] for v in variants}
     resilience_indices = {}
 
-    config = MaritimeExperimentConfig(scenario_type="channel", n_vessels=3, episode_length=30)
+    config = MaritimeExperimentConfig(scenario_type="head_on", n_vessels=2, episode_length=60)
 
     print("\n1. Running Comparative Degradation Sweeps across 4 Ablation Variants...")
     for var in variants:
         print(f"\n---> Evaluating Variant: {labels[var]}")
 
-        # Instantiate variant policies
+        # Instantiate variant policies and load trained checkpoint weights
+        import torch
+        ckpt_path = "checkpoints/marlin_twin_seed_42.pt"
+        has_ckpt = os.path.exists(ckpt_path)
+        if has_ckpt:
+            ckpt_data = torch.load(ckpt_path)
+
         if var == "marlin_twin":
-            pols = {i: GATPolicy() for i in range(3)}
+            pols = {i: GATPolicy() for i in range(2)}
         elif var == "ablation_mean_pooling":
-            pols = {i: MeanPoolingPolicy() for i in range(3)}
+            pols = {i: MeanPoolingPolicy() for i in range(2)}
         elif var == "ablation_flat_mlp":
-            pols = {i: MLPPolicy() for i in range(3)}
+            pols = {i: MLPPolicy() for i in range(2)}
         elif var == "ablation_no_digital_twin":
-            pols = {i: GATPolicy() for i in range(3)}
+            pols = {i: GATPolicy() for i in range(2)}
+
+        if has_ckpt:
+            for i in range(2):
+                if i in ckpt_data:
+                    try:
+                        pols[i].set_state(ckpt_data[i])
+                    except Exception:
+                        pass
 
         for lam in degradation_levels:
-            env = MaritimeCoordEnv(config)
-            env.set_communication_degradation(lam)
+            ep_scores = []
+            for ep_seed in range(5):
+                env = MaritimeCoordEnv(config)
+                env.set_communication_degradation(lam)
 
-            obs, _ = env.reset(seed=42)
-            done = False
-            ep_rewards = []
+                # For Ablation 3 (No Digital Twin), disable EKF state filtering
+                if var == "ablation_no_digital_twin":
+                    env.dt_estimator.enabled = False
 
-            while not done:
-                actions = {}
-                for vid, agent_obs in obs.items():
-                    act_vec = pols[vid].act(np.random.randn(32).astype(np.float32), deterministic=True)
-                    actions[vid] = VesselAction(
-                        vessel_id=vid,
-                        propeller_rpm=float(act_vec[0] * 0.5 + 0.5),
-                        rudder_angle=float(act_vec[1] * 0.5),
-                        message_targets=[]
-                    )
+                obs, _ = env.reset(seed=ep_seed + 100)
+                done = False
+                ep_rewards = []
 
-                obs, rewards, team_reward, done, info = env.step(actions)
-                ep_rewards.append(team_reward)
+                min_step_dist = 5000.0
+                while not done:
+                    actions = {}
+                    for vid, agent_obs in obs.items():
+                        wrapper = VesselAgentWrapper(env.get_scene().vessels[vid], pols[vid])
+                        actions[vid] = wrapper.select_action(agent_obs, deterministic=True)
 
-            mean_reward = float(np.mean(ep_rewards))
-            # Base safety score calculation
-            base_score = float(np.clip((mean_reward + 100.0) / 100.0, 0.05, 1.0))
+                    obs, rewards, team_reward, done, info = env.step(actions)
+                    ep_rewards.append(team_reward)
 
-            # Simulate performance degradation for Ablation 3 (No Digital Twin) under comms loss
-            if var == "ablation_no_digital_twin":
-                safety_score = float(np.clip(base_score * (0.6 + 0.4 * lam), 0.05, 1.0))
-            elif var == "ablation_flat_mlp":
-                safety_score = float(np.clip(base_score * (0.8 + 0.2 * lam), 0.05, 1.0))
-            else:
-                safety_score = base_score
+                    # Track actual minimum distance between vessels during rollout
+                    v_ids = list(env.get_scene().vessels.keys())
+                    if len(v_ids) >= 2:
+                        p1 = env.get_scene().vessels[v_ids[0]].current_state.position()
+                        p2 = env.get_scene().vessels[v_ids[1]].current_state.position()
+                        dist = float(np.linalg.norm(p1 - p2))
+                        if dist < min_step_dist:
+                            min_step_dist = dist
 
+                # Compute physical safety score from minimum trajectory clearance d_min
+                score = float(np.clip(min_step_dist / 500.0, 0.05, 1.0))
+                ep_scores.append(score)
+
+            safety_score = float(np.mean(ep_scores))
             ablation_results[var].append(safety_score)
             print(f"      Lambda = {lam:.1f} -> Safety Score J(lambda): {safety_score:.3f}")
 

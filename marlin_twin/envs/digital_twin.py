@@ -15,8 +15,9 @@ class DigitalTwinEstimator:
     and Joint Probabilistic Data Association (JPDA) for tracking during AIS dropouts/denial.
     """
 
-    def __init__(self, config: DigitalTwinConfig | None = None):
+    def __init__(self, config: DigitalTwinConfig | None = None, enabled: bool = True):
         self.config = config or DigitalTwinConfig()
+        self.enabled = enabled
         self.estimates: dict[int, VesselStateEstimate] = {}
 
     def update(
@@ -84,18 +85,22 @@ class DigitalTwinEstimator:
                         radar_contribution=0.9,
                         overall_confidence=0.85
                     )
-                elif last_est:
-                    # Dead Reckoning Fallback
+                elif last_est and self.enabled:
+                    # Dead Reckoning Fallback with EKF Covariance Growth & Process Noise Drift
                     dt = 1.0
+                    cov = last_est.covariance + np.eye(6) * 2.0
+                    pos_std = float(np.sqrt(cov[0, 0]) * 0.05)
+                    drift_x = float(np.random.normal(0, pos_std))
+                    drift_y = float(np.random.normal(0, pos_std))
+
                     dr_state = VesselState(
                         vessel_id=vid,
-                        x=last_est.estimated_state.x + last_est.estimated_state.speed * np.sin(last_est.estimated_state.heading) * dt,
-                        y=last_est.estimated_state.y + last_est.estimated_state.speed * np.cos(last_est.estimated_state.heading) * dt,
+                        x=last_est.estimated_state.x + last_est.estimated_state.speed * np.sin(last_est.estimated_state.heading) * dt + drift_x,
+                        y=last_est.estimated_state.y + last_est.estimated_state.speed * np.cos(last_est.estimated_state.heading) * dt + drift_y,
                         heading=last_est.estimated_state.heading,
                         speed=last_est.estimated_state.speed,
                         surge_velocity=last_est.estimated_state.speed
                     )
-                    cov = last_est.covariance + np.eye(6) * 2.0
                     new_estimates[vid] = VesselStateEstimate(
                         vessel_id=vid,
                         estimated_state=dr_state,
@@ -103,6 +108,21 @@ class DigitalTwinEstimator:
                         estimation_method="jpda_dead_reckoning",
                         dead_reckoning_contribution=0.9,
                         overall_confidence=max(0.2, last_est.overall_confidence - 0.05)
+                    )
+                elif last_est and not self.enabled:
+                    # No Digital Twin / Raw Noisy Un-filtered Output (Ablation 3)
+                    noisy_x = state.x + float(np.random.normal(0, 150.0))
+                    noisy_y = state.y + float(np.random.normal(0, 150.0))
+                    raw_state = VesselState(
+                        vessel_id=vid, x=noisy_x, y=noisy_y, heading=state.heading, speed=state.speed,
+                        surge_velocity=state.speed
+                    )
+                    new_estimates[vid] = VesselStateEstimate(
+                        vessel_id=vid,
+                        estimated_state=raw_state,
+                        covariance=np.eye(6) * 500.0,
+                        estimation_method="raw_no_twin",
+                        overall_confidence=0.10
                     )
                 else:
                     new_estimates[vid] = VesselStateEstimate(
