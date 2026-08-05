@@ -15,7 +15,9 @@ def test_normalize_angle_wraps_to_pi_range():
     assert normalize_angle(0.0) == pytest.approx(0.0)
     assert normalize_angle(3 * np.pi) == pytest.approx(-np.pi, abs=1e-6)
     assert normalize_angle(-3 * np.pi) == pytest.approx(-np.pi, abs=1e-6)
-    assert -np.pi <= normalize_angle(10.0) <= np.pi
+    # Cross-check against an independent wrap-to-[-pi,pi] formula (atan2 of
+    # the angle's own sin/cos), rather than re-deriving the source's modulo.
+    assert normalize_angle(10.0) == pytest.approx(np.arctan2(np.sin(10.0), np.cos(10.0)), abs=1e-6)
 
 
 def test_seed_everything_reproducible_across_random_and_numpy():

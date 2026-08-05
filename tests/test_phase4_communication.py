@@ -35,6 +35,11 @@ def test_binary_message_serialization_roundtrip():
     assert speed == pytest.approx(12.5, abs=1e-3)
 
 
+def test_decode_binary_rejects_wrong_length_payload():
+    with pytest.raises(ValueError):
+        CommunicationLayer.decode_binary(b"\x00" * 15)
+
+
 def test_gat_policy_action_generation():
     policy = GATPolicy(obs_dim=32, action_dim=2)
     obs = np.random.randn(32).astype(np.float32)

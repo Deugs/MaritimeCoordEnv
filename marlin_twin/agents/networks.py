@@ -54,7 +54,14 @@ class GATEncoder(nn.Module):
         score_e = (h_edge * self.attn_edge).sum(dim=-1)
 
         scores = F.leaky_relu(score_src + score_dst + score_e, negative_slope=0.2)
-        alpha = torch.softmax(scores, dim=0)
+
+        # Softmax over each destination node's incoming edges (not over all
+        # edges globally), so every node's attention weights sum to 1 per head
+        # regardless of how many neighbors it has.
+        exp_scores = torch.exp(scores - scores.max())
+        denom = torch.zeros(N, self.heads, dtype=exp_scores.dtype)
+        denom.index_add_(0, dst, exp_scores)
+        alpha = exp_scores / denom[dst].clamp_min(1e-12)
 
         out = torch.zeros_like(h_node)
         out.index_add_(0, dst, alpha.unsqueeze(-1) * h_node[src])

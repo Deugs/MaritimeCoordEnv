@@ -12,6 +12,9 @@ import os
 import shutil
 import subprocess
 import zipfile
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 def check_latex_installed() -> bool:
@@ -25,7 +28,7 @@ def compile_latex_paper():
         print("[INFO] pdflatex not found on system PATH. Skipping local PDF build.")
         return False
 
-    paper_dir = os.path.abspath("paper")
+    paper_dir = os.path.join(REPO_ROOT, "paper")
     print(f"=== Compiling IEEE LaTeX Paper in {paper_dir} ===")
 
     try:
@@ -50,16 +53,16 @@ def compile_latex_paper():
 def create_overleaf_zip_package():
     """Creates a standalone zip file containing all files for Overleaf import."""
     print("=== Creating Overleaf Upload Package: paper/marlin_twin_ieee_paper.zip ===")
-    zip_path = os.path.join("paper", "marlin_twin_ieee_paper.zip")
+    zip_path = os.path.join(REPO_ROOT, "paper", "marlin_twin_ieee_paper.zip")
 
     files_to_zip = [
-        ("paper/main.tex", "main.tex"),
-        ("paper/references.bib", "references.bib"),
-        ("paper/IEEEtran.cls", "IEEEtran.cls"),
+        (os.path.join(REPO_ROOT, "paper", "main.tex"), "main.tex"),
+        (os.path.join(REPO_ROOT, "paper", "references.bib"), "references.bib"),
+        (os.path.join(REPO_ROOT, "paper", "IEEEtran.cls"), "IEEEtran.cls"),
     ]
 
     # Add all vector PDF figures
-    pdf_dir = os.path.join("figures", "vector_pdf")
+    pdf_dir = os.path.join(REPO_ROOT, "figures", "vector_pdf")
     if os.path.exists(pdf_dir):
         for fig_file in os.listdir(pdf_dir):
             if fig_file.endswith(".pdf"):

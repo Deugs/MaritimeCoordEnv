@@ -8,11 +8,15 @@ Usage:
 """
 
 import os
+from pathlib import Path
+
 import numpy as np
 import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 def setup_ieee_style():
@@ -38,13 +42,14 @@ def setup_ieee_style():
 
 def save_fig_all_formats(name: str):
     """Saves active figure in high-DPI PNG, vector PDF, and vector SVG formats."""
-    os.makedirs("figures", exist_ok=True)
-    os.makedirs("figures/vector_pdf", exist_ok=True)
-    os.makedirs("figures/vector_svg", exist_ok=True)
+    figures_dir = os.path.join(REPO_ROOT, "figures")
+    os.makedirs(figures_dir, exist_ok=True)
+    os.makedirs(os.path.join(figures_dir, "vector_pdf"), exist_ok=True)
+    os.makedirs(os.path.join(figures_dir, "vector_svg"), exist_ok=True)
 
-    plt.savefig(f"figures/{name}.png", dpi=300)
-    plt.savefig(f"figures/vector_pdf/{name}.pdf")
-    plt.savefig(f"figures/vector_svg/{name}.svg")
+    plt.savefig(os.path.join(figures_dir, f"{name}.png"), dpi=300)
+    plt.savefig(os.path.join(figures_dir, "vector_pdf", f"{name}.pdf"))
+    plt.savefig(os.path.join(figures_dir, "vector_svg", f"{name}.svg"))
     plt.close()
 
 

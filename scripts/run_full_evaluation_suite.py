@@ -15,6 +15,7 @@ from pathlib import Path
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
+from loguru import logger
 
 from marlin_twin.data_classes import MaritimeExperimentConfig, VesselAction
 from marlin_twin.envs.maritime_coord_env import MaritimeCoordEnv
@@ -70,13 +71,16 @@ def main():
             pols = {i: GATPolicy() for i in range(2)}
             ckpt = os.path.join(REPO_ROOT, "checkpoints", f"{model}_seed_42.pt")
             if os.path.exists(ckpt):
-                data = torch.load(ckpt)
+                data = torch.load(ckpt, weights_only=True)
                 for i in range(2):
                     if i in data:
                         try:
                             pols[i].set_state(data[i])
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.warning(
+                                f"Failed to load checkpoint state for {model} vessel {i} from "
+                                f"{ckpt}: {e}. Evaluating with an untrained policy instead."
+                            )
             return pols
 
         return factory

@@ -3,6 +3,7 @@
 # ============================================================================
 
 import pandas as pd
+import pytest
 from marlin_twin.data.ais_loader import AISDataLoader
 
 
@@ -29,3 +30,16 @@ def test_convert_to_vessel_states():
     assert len(states) == 10
     assert states[0].vessel_id == 1
     assert states[0].speed > 0.0
+
+
+def test_load_ais_csv_missing_file_raises_file_not_found_error(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        AISDataLoader.load_ais_csv(str(tmp_path / "does_not_exist.csv"))
+
+
+def test_load_ais_csv_missing_required_column_raises_value_error(tmp_path):
+    csv_path = tmp_path / "incomplete.csv"
+    csv_path.write_text("MMSI,LAT,LON,SOG\n123,37.0,-122.0,10.0\n")  # missing COG
+
+    with pytest.raises(ValueError):
+        AISDataLoader.load_ais_csv(str(csv_path))

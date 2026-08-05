@@ -7,10 +7,14 @@ Usage:
 """
 
 import os
+from pathlib import Path
+
 import numpy as np
 import matplotlib.pyplot as plt
 from marlin_twin.data_classes import VesselDynamics, VesselType
 from marlin_twin.envs.vessel_dynamics import MMGDynamicsSolver
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 def main():
@@ -65,8 +69,8 @@ def main():
     ax2.grid(True, linestyle="--", alpha=0.5)
     ax2.legend()
 
-    os.makedirs("figures", exist_ok=True)
-    out_path = os.path.join("figures", "phase1_sea_trials.png")
+    os.makedirs(os.path.join(REPO_ROOT, "figures"), exist_ok=True)
+    out_path = os.path.join(REPO_ROOT, "figures", "phase1_sea_trials.png")
     plt.tight_layout()
     plt.savefig(out_path, dpi=300)
     plt.close()

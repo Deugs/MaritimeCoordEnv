@@ -27,12 +27,21 @@ class MMGDynamicsSolver:
         )
 
         def f(s: VesselState) -> np.ndarray:
-            dx, dy, dheading, du, dr = self.dynamics.compute_derivatives(
+            dx, dy, dheading, du, dv, dr = self.dynamics.compute_derivatives(
                 s, target_rpm, target_rudder
             )
-            return np.array([dx, dy, dheading, du, dr])
+            return np.array([dx, dy, dheading, du, dv, dr])
 
-        s_vec = np.array([state.x, state.y, state.heading, state.surge_velocity, state.yaw_rate])
+        s_vec = np.array(
+            [
+                state.x,
+                state.y,
+                state.heading,
+                state.surge_velocity,
+                state.sway_velocity,
+                state.yaw_rate,
+            ]
+        )
 
         # RK4 Steps
         k1 = f(state)
@@ -44,7 +53,8 @@ class MMGDynamicsSolver:
             heading=state.heading + 0.5 * dt * k1[2],
             speed=state.speed + 0.5 * dt * k1[3],
             surge_velocity=state.surge_velocity + 0.5 * dt * k1[3],
-            yaw_rate=state.yaw_rate + 0.5 * dt * k1[4],
+            sway_velocity=state.sway_velocity + 0.5 * dt * k1[4],
+            yaw_rate=state.yaw_rate + 0.5 * dt * k1[5],
         )
         k2 = f(st_k2)
 
@@ -55,7 +65,8 @@ class MMGDynamicsSolver:
             heading=state.heading + 0.5 * dt * k2[2],
             speed=state.speed + 0.5 * dt * k2[3],
             surge_velocity=state.surge_velocity + 0.5 * dt * k2[3],
-            yaw_rate=state.yaw_rate + 0.5 * dt * k2[4],
+            sway_velocity=state.sway_velocity + 0.5 * dt * k2[4],
+            yaw_rate=state.yaw_rate + 0.5 * dt * k2[5],
         )
         k3 = f(st_k3)
 
@@ -66,24 +77,27 @@ class MMGDynamicsSolver:
             heading=state.heading + dt * k3[2],
             speed=state.speed + dt * k3[3],
             surge_velocity=state.surge_velocity + dt * k3[3],
-            yaw_rate=state.yaw_rate + dt * k3[4],
+            sway_velocity=state.sway_velocity + dt * k3[4],
+            yaw_rate=state.yaw_rate + dt * k3[5],
         )
         k4 = f(st_k4)
 
         new_vec = s_vec + (dt / 6.0) * (k1 + 2 * k2 + 2 * k3 + k4)
 
         new_heading = (new_vec[2] + np.pi) % (2 * np.pi) - np.pi
-        new_speed = max(0.0, new_vec[3])
+        new_surge = max(0.0, new_vec[3])
+        new_sway = float(new_vec[4])
+        new_speed = float(np.sqrt(new_surge**2 + new_sway**2))
 
         return VesselState(
             vessel_id=state.vessel_id,
             x=float(new_vec[0]),
             y=float(new_vec[1]),
             heading=float(new_heading),
-            speed=float(new_speed),
-            surge_velocity=float(new_speed),
-            sway_velocity=state.sway_velocity,
-            yaw_rate=float(new_vec[4]),
+            speed=new_speed,
+            surge_velocity=float(new_surge),
+            sway_velocity=new_sway,
+            yaw_rate=float(new_vec[5]),
         )
 
     def run_turning_circle_test(

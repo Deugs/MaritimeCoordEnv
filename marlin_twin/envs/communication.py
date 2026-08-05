@@ -26,11 +26,15 @@ class CommunicationChannelManager:
         self,
         outgoing_messages: list[MaritimeMessage],
         weather_degradation: float = 0.0,
-        jamming_active: bool = False,
     ) -> list[MaritimeMessage]:
-        """Process one time step of message transmissions."""
+        """Process one time step of message transmissions.
+
+        Jamming state (`jamming_active`/`jamming_zone`) is read from `self.channel`
+        rather than taken as a parameter here, since it's set independently via
+        `BaseMaritimeEnvironment.set_communication_degradation` and should persist
+        across steps until changed, not reset every call.
+        """
         self.channel.weather_degradation = weather_degradation
-        self.channel.jamming_active = jamming_active
 
         # Sort incoming messages by priority (CRITICAL = 0 comes first)
         all_messages = self.channel.message_queue + outgoing_messages
@@ -42,6 +46,10 @@ class CommunicationChannelManager:
         avail_bits = self.channel.available_bandwidth(time_window=1.0)
 
         for msg in all_messages:
+            if self.channel.jamming_active and self.channel._in_jamming_zone(msg):
+                remaining.append(msg)  # Dropped: sender is inside the jamming zone
+                continue
+
             if msg.size_bits <= avail_bits:
                 # Check packet loss
                 loss_prob = self.channel.packet_loss_rate + weather_degradation * 0.2

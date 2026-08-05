@@ -49,14 +49,14 @@ class MAPPOTrainer(BaseTrainer):
                 for vid, agent_obs in obs.items():
                     pol = self.policies[vid]
                     wrapper = VesselAgentWrapper(env.get_scene().vessels[vid], pol)
-                    act = wrapper.select_action(agent_obs)
-                    actions[vid] = act
 
                     vec = ObservationBuilder.to_vector(agent_obs)
-                    act_arr, val, logp = pol.get_action_and_val(vec)
+                    tanh_action, raw_action, val, logp = pol.get_action_and_val(vec)
+                    act = wrapper.build_action(agent_obs, tanh_action)
+                    actions[vid] = act
 
                     obs_vecs.append(vec)
-                    act_vecs.append([act.propeller_rpm, act.rudder_angle])
+                    act_vecs.append(raw_action)
                     val_vecs.append(val)
                     logp_vecs.append(logp)
 
@@ -165,7 +165,7 @@ class MAPPOTrainer(BaseTrainer):
         """Loads PyTorch model state dicts from a checkpoint file."""
         if not os.path.exists(filepath):
             raise FileNotFoundError(f"Checkpoint file not found: {filepath}")
-        checkpoint_data = torch.load(filepath)
+        checkpoint_data = torch.load(filepath, weights_only=True)
         for vid, state in checkpoint_data.items():
             if vid in self.policies:
                 self.policies[vid].set_state(state)

@@ -1,3 +1,5 @@
+import numpy as np
+import pytest
 from marlin_twin.data_classes import MaritimeExperimentConfig
 from marlin_twin.envs.maritime_coord_env import MaritimeCoordEnv
 from marlin_twin.agents.policies import GATPolicy
@@ -14,7 +16,11 @@ def test_evaluate_scenario_returns_expected_summary_fields():
     )
 
     assert results["scenario"] == "channel"
-    assert 0.0 <= results["safety_score"] <= 1.0
+    # safety_score must be the documented function of mean_cpa, not just
+    # some value that happens to fall in [0, 1] by construction.
+    assert results["safety_score"] == pytest.approx(
+        float(np.clip(results["mean_cpa"] / 1000.0, 0.0, 1.0))
+    )
     assert isinstance(results["mean_reward"], float)
     assert isinstance(results["std_reward"], float)
     assert results["mean_cpa"] > 0.0

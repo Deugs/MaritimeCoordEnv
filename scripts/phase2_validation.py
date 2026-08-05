@@ -7,11 +7,15 @@ Usage:
 """
 
 import os
+from pathlib import Path
+
 import numpy as np
 import matplotlib.pyplot as plt
 from marlin_twin.envs.scenarios import ScenarioGenerator
 from marlin_twin.envs.sensors import SensorSimulator
 from marlin_twin.envs.digital_twin import DigitalTwinEstimator
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 def main():
@@ -70,8 +74,8 @@ def main():
     ax.set_title("Digital Twin State Estimation Accuracy Under AIS Loss", fontweight="bold")
     ax.grid(True, axis="y", linestyle="--", alpha=0.5)
 
-    os.makedirs("figures", exist_ok=True)
-    out_path = os.path.join("figures", "phase2_digital_twin_estimation.png")
+    os.makedirs(os.path.join(REPO_ROOT, "figures"), exist_ok=True)
+    out_path = os.path.join(REPO_ROOT, "figures", "phase2_digital_twin_estimation.png")
     plt.tight_layout()
     plt.savefig(out_path, dpi=300)
     plt.close()
