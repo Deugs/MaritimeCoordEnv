@@ -9,16 +9,20 @@ Usage:
 import os
 import numpy as np
 import matplotlib.pyplot as plt
-from marlin_twin.data_classes import VesselDynamics, VesselType, VesselState
+from marlin_twin.data_classes import VesselDynamics, VesselType
 from marlin_twin.envs.vessel_dynamics import MMGDynamicsSolver
+
 
 def main():
     print("=== MARLIN-Twin Phase 1 Validation Suite ===")
 
     dynamics = VesselDynamics(
-        vessel_id=0, vessel_type=VesselType.CARGO,
-        mass=15000000.0, moment_of_inertia=2e9,
-        max_rpm=150.0, propeller_diameter=4.0
+        vessel_id=0,
+        vessel_type=VesselType.CARGO,
+        mass=15000000.0,
+        moment_of_inertia=2e9,
+        max_rpm=150.0,
+        propeller_diameter=4.0,
     )
     solver = MMGDynamicsSolver(dynamics)
 
@@ -40,22 +44,22 @@ def main():
     tc_traj = tc_results["trajectory"]
     x_tc = [s.x for s in tc_traj]
     y_tc = [s.y for s in tc_traj]
-    ax1.plot(x_tc, y_tc, 'b-', label="Trajectory (35 deg Rudder)")
-    ax1.set_title("IMO Turning Circle Maneuver", fontweight='bold')
+    ax1.plot(x_tc, y_tc, "b-", label="Trajectory (35 deg Rudder)")
+    ax1.set_title("IMO Turning Circle Maneuver", fontweight="bold")
     ax1.set_xlabel("Easting (m)")
     ax1.set_ylabel("Northing (m)")
     ax1.grid(True, linestyle="--", alpha=0.5)
     ax1.legend()
-    ax1.axis('equal')
+    ax1.axis("equal")
 
     # Plot Zig-zag Heading
     zz_traj = zz_results["trajectory"]
     t_zz = np.arange(len(zz_traj))
     heading_deg = [np.degrees(s.heading) for s in zz_traj]
-    ax2.plot(t_zz, heading_deg, 'r-', label="Heading Angle (deg)")
-    ax2.axhline(10.0, color='k', linestyle=':', label="Rudder Target (+10 deg)")
-    ax2.axhline(-10.0, color='k', linestyle=':', label="Rudder Target (-10 deg)")
-    ax2.set_title("10/10 Zig-zag Maneuver", fontweight='bold')
+    ax2.plot(t_zz, heading_deg, "r-", label="Heading Angle (deg)")
+    ax2.axhline(10.0, color="k", linestyle=":", label="Rudder Target (+10 deg)")
+    ax2.axhline(-10.0, color="k", linestyle=":", label="Rudder Target (-10 deg)")
+    ax2.set_title("10/10 Zig-zag Maneuver", fontweight="bold")
     ax2.set_xlabel("Time (s)")
     ax2.set_ylabel("Heading Angle (deg)")
     ax2.grid(True, linestyle="--", alpha=0.5)
@@ -69,6 +73,7 @@ def main():
 
     print(f"\nValidation plots successfully saved to: {out_path}")
     print("=== Phase 1 Validation Completed Successfully! ===")
+
 
 if __name__ == "__main__":
     main()

@@ -1,6 +1,4 @@
-# ============================================================================
-# FILE: marlin_twin/data_classes.py
-# ============================================================================
+"""Dataclasses and enums for vessel state, scenes, communication, and experiment results."""
 
 from dataclasses import dataclass, field
 from typing import List, Dict, Tuple, Optional, Callable
@@ -8,23 +6,26 @@ from enum import Enum, auto
 import numpy as np
 from numpy.typing import NDArray
 
-
 # =============================================================================
 # ENUMERATIONS
 # =============================================================================
 
+
 class VesselType(Enum):
     """Types of maritime vessels."""
+
     CARGO = auto()
     CONTAINER = auto()
     TANKER = auto()
     PASSENGER = auto()
-    USV = auto()            # Unmanned Surface Vehicle
+    USV = auto()  # Unmanned Surface Vehicle
     FERRY = auto()
     FISHING = auto()
 
+
 class COLREGsRule(Enum):
     """COLREGs rules for encounter classification."""
+
     RULE_13_OVERTAKING = auto()
     RULE_14_HEAD_ON = auto()
     RULE_15_CROSSING = auto()
@@ -32,8 +33,10 @@ class COLREGsRule(Enum):
     RULE_17_STAND_ON = auto()
     RULE_18_RESPONSIBILITIES = auto()
 
+
 class EncounterType(Enum):
     """Encounter classification for maritime coordination."""
+
     HEAD_ON = auto()
     CROSSING_GIVE_WAY = auto()
     CROSSING_STAND_ON = auto()
@@ -41,29 +44,37 @@ class EncounterType(Enum):
     OVERTAKEN = auto()
     NO_ENCOUNTER = auto()
 
+
 class MessagePriority(Enum):
     """Communication message priority levels."""
-    CRITICAL = 0    # Collision imminent
-    HIGH = 1        # Action required
-    MEDIUM = 2      # Information sharing
-    LOW = 3         # Routine updates
+
+    CRITICAL = 0  # Collision imminent
+    HIGH = 1  # Action required
+    MEDIUM = 2  # Information sharing
+    LOW = 3  # Routine updates
+
 
 class CommunicationStatus(Enum):
     """Status of communication link."""
+
     ACTIVE = auto()
     DEGRADED = auto()
     LOST = auto()
     JAMMED = auto()
 
+
 class NavigationMode(Enum):
     """Navigation control mode."""
+
     AUTONOMOUS = auto()
     REMOTE_CONTROL = auto()
     RULE_BASED = auto()
     EMERGENCY = auto()
 
+
 class EnvironmentCondition(Enum):
     """Environmental conditions affecting navigation."""
+
     CLEAR = auto()
     FOG = auto()
     RAIN = auto()
@@ -71,8 +82,10 @@ class EnvironmentCondition(Enum):
     HIGH_SEA = auto()
     ICE = auto()
 
+
 class ExplanationType(Enum):
     """Types of causal explanations."""
+
     INTERVENTION = auto()
     COUNTERFACTUAL = auto()
     PATH_ANALYSIS = auto()
@@ -83,63 +96,61 @@ class ExplanationType(Enum):
 # VESSEL DYNAMICS DOMAIN
 # =============================================================================
 
+
 @dataclass(frozen=True)
 class VesselState:
     """Physical state of a vessel."""
+
     vessel_id: int
-    x: float                        # Easting (m)
-    y: float                        # Northing (m)
-    heading: float                  # Radians (0 = North)
-    speed: float                    # m/s
-    yaw_rate: float = 0.0           # rad/s
-    surge_velocity: float = 0.0     # m/s (body frame)
-    sway_velocity: float = 0.0      # m/s (body frame)
+    x: float  # Easting (m)
+    y: float  # Northing (m)
+    heading: float  # Radians (0 = North)
+    speed: float  # m/s
+    yaw_rate: float = 0.0  # rad/s
+    surge_velocity: float = 0.0  # m/s (body frame)
+    sway_velocity: float = 0.0  # m/s (body frame)
 
     def position(self) -> NDArray:
         return np.array([self.x, self.y])
 
     def velocity_vector(self) -> NDArray:
-        return np.array([
-            self.speed * np.sin(self.heading),
-            self.speed * np.cos(self.heading)
-        ])
+        return np.array([self.speed * np.sin(self.heading), self.speed * np.cos(self.heading)])
 
-    def copy_with(self, **kwargs) -> 'VesselState':
+    def copy_with(self, **kwargs) -> "VesselState":
         return VesselState(**{**self.__dict__, **kwargs})
+
 
 @dataclass
 class VesselDynamics:
     """MMG model parameters for vessel dynamics."""
+
     vessel_id: int
     vessel_type: VesselType
 
     # Mass and inertia
-    mass: float                     # kg
-    moment_of_inertia: float        # kg*m^2
+    mass: float  # kg
+    moment_of_inertia: float  # kg*m^2
 
     # Hull hydrodynamics
-    X_u_dot: float = -50000.0       # Added mass surge
-    Y_v_dot: float = -100000.0      # Added mass sway
-    N_r_dot: float = -500000.0      # Added mass yaw
+    X_u_dot: float = -50000.0  # Added mass surge
+    Y_v_dot: float = -100000.0  # Added mass sway
+    N_r_dot: float = -500000.0  # Added mass yaw
 
     # Damping coefficients
-    X_u: float = -1000.0            # Surge damping
-    Y_v: float = -5000.0            # Sway damping
-    N_r: float = -20000.0           # Yaw damping
+    X_u: float = -1000.0  # Surge damping
+    Y_v: float = -5000.0  # Sway damping
+    N_r: float = -20000.0  # Yaw damping
 
     # Propeller
-    propeller_diameter: float = 4.0 # m
+    propeller_diameter: float = 4.0  # m
     max_rpm: float = 150.0
 
     # Rudder
-    rudder_area: float = 20.0       # m^2
+    rudder_area: float = 20.0  # m^2
     max_rudder_angle: float = np.pi / 6  # 30 degrees
 
     def compute_derivatives(
-        self,
-        state: VesselState,
-        propeller_rpm: float,
-        rudder_angle: float
+        self, state: VesselState, propeller_rpm: float, rudder_angle: float
     ) -> Tuple[float, float, float, float, float]:
         """Compute state derivatives (dx, dy, dheading, du, dr)."""
         u = state.surge_velocity
@@ -149,18 +160,16 @@ class VesselDynamics:
         # Surge equation (MMG added mass & propeller thrust)
         effective_mass = max(self.mass - self.X_u_dot, 1.0)
         n_rps = (propeller_rpm * self.max_rpm) / 60.0
-        thrust = (n_rps ** 2) * (self.propeller_diameter ** 4) * 0.05
+        thrust = (n_rps**2) * (self.propeller_diameter**4) * 0.05
         drag = self.X_u * u * abs(u)
         du = (thrust + drag) / effective_mass
 
         # Sway equation
-        Y = (self.Y_v_dot * v + self.Y_v * v * abs(v) + 
-             rudder_angle * self.rudder_area * u * u * 0.5)
-        dv = Y / max(self.mass, 1.0)
+        Y = self.Y_v_dot * v + self.Y_v * v * abs(v) + rudder_angle * self.rudder_area * u * u * 0.5
+        Y / max(self.mass, 1.0)
 
         # Yaw equation
-        N = (self.N_r_dot * r + self.N_r * r * abs(r) + 
-             rudder_angle * self.rudder_area * u * u * 0.3)
+        N = self.N_r_dot * r + self.N_r * r * abs(r) + rudder_angle * self.rudder_area * u * u * 0.3
         dr = N / max(self.moment_of_inertia, 1.0)
 
         # Kinematics (Nautical Convention: 0=North/+Y, pi/2=East/+X)
@@ -170,18 +179,20 @@ class VesselDynamics:
 
         return dx, dy, dheading, du, dr
 
+
 @dataclass(frozen=True)
 class VesselSpecification:
     """Static vessel specifications."""
+
     vessel_id: int
     name: str
     vessel_type: VesselType
-    length: float                   # m
-    beam: float                     # m
-    draft: float                    # m
-    max_speed: float                # m/s
+    length: float  # m
+    beam: float  # m
+    draft: float  # m
+    max_speed: float  # m/s
     min_speed: float = 0.0
-    turning_circle: float = 0.0     # m
+    turning_circle: float = 0.0  # m
 
     # Safety
     safety_domain_radius: float = 500.0  # m (CPA threshold)
@@ -197,21 +208,25 @@ class VesselSpecification:
 # NAVIGATION DOMAIN
 # =============================================================================
 
+
 @dataclass(frozen=True)
 class Waypoint:
     """Navigation waypoint."""
+
     waypoint_id: int
     x: float
     y: float
-    speed: float                    # Desired speed at waypoint
-    radius: float = 50.0            # Acceptance radius (m)
+    speed: float  # Desired speed at waypoint
+    radius: float = 50.0  # Acceptance radius (m)
 
     def distance_to(self, state: VesselState) -> float:
-        return np.sqrt((self.x - state.x)**2 + (self.y - state.y)**2)
+        return np.sqrt((self.x - state.x) ** 2 + (self.y - state.y) ** 2)
+
 
 @dataclass
 class Route:
     """Planned route for a vessel."""
+
     vessel_id: int
     waypoints: List[Waypoint]
     current_waypoint_idx: int = 0
@@ -228,24 +243,27 @@ class Route:
     def remaining_distance(self, state: VesselState) -> float:
         dist = 0.0
         current = state
-        for wp in self.waypoints[self.current_waypoint_idx:]:
-            dist += np.sqrt((wp.x - current.x)**2 + (wp.y - current.y)**2)
-            current = VesselState(vessel_id=current.vessel_id, x=wp.x, y=wp.y, 
-                                 heading=current.heading, speed=wp.speed)
+        for wp in self.waypoints[self.current_waypoint_idx :]:
+            dist += np.sqrt((wp.x - current.x) ** 2 + (wp.y - current.y) ** 2)
+            current = VesselState(
+                vessel_id=current.vessel_id, x=wp.x, y=wp.y, heading=current.heading, speed=wp.speed
+            )
         return dist
+
 
 @dataclass
 class Encounter:
     """Detected encounter between two vessels."""
+
     vessel_i: int
     vessel_j: int
     encounter_type: EncounterType
     colregs_rule: Optional[COLREGsRule]
-    cpa_distance: float             # Closest Point of Approach (m)
-    cpa_time: float                 # Time to CPA (s)
-    tcpa: float                     # Time to CPA (alternative)
-    dcpa: float                     # Distance at CPA
-    relative_bearing: float         # Radians
+    cpa_distance: float  # Closest Point of Approach (m)
+    cpa_time: float  # Time to CPA (s)
+    tcpa: float  # Time to CPA (alternative)
+    dcpa: float  # Distance at CPA
+    relative_bearing: float  # Radians
     is_dangerous: bool = False
 
     def risk_level(self) -> float:
@@ -261,9 +279,11 @@ class Encounter:
 # AGENT DOMAIN
 # =============================================================================
 
+
 @dataclass(frozen=True)
 class VesselObservation:
     """Local observation for a vessel agent."""
+
     vessel_id: int
     own_state: VesselState
     own_route: Route
@@ -292,12 +312,14 @@ class VesselObservation:
     active_encounters: List[Encounter]
     colregs_compliance_score: float
 
+
 @dataclass(frozen=True)
 class VesselAction:
     """Action taken by a vessel agent."""
+
     vessel_id: int
-    propeller_rpm: float            # Normalized -1.0 to 1.0
-    rudder_angle: float             # Radians
+    propeller_rpm: float  # Normalized -1.0 to 1.0
+    rudder_angle: float  # Radians
 
     # Communication action
     message_targets: List[int]
@@ -308,9 +330,11 @@ class VesselAction:
     emergency_stop: bool = False
     sound_signal: Optional[str] = None
 
+
 @dataclass(frozen=True)
 class MaritimeMessage:
     """Inter-vessel communication message."""
+
     sender_id: int
     receiver_id: int
     content: NDArray
@@ -326,9 +350,11 @@ class MaritimeMessage:
     def is_critical(self) -> bool:
         return self.priority == MessagePriority.CRITICAL
 
+
 @dataclass
 class MaritimeCommunicationChannel:
     """Bandwidth-limited maritime communication channel."""
+
     channel_id: str
     bandwidth_bps: float
     base_latency: float
@@ -361,9 +387,11 @@ class MaritimeCommunicationChannel:
     def get_link_status(self, vessel_i: int, vessel_j: int) -> CommunicationStatus:
         return self.active_links.get((vessel_i, vessel_j), CommunicationStatus.ACTIVE)
 
+
 @dataclass
 class VesselAgent:
     """Autonomous vessel agent."""
+
     vessel_id: int
     specification: VesselSpecification
     dynamics: VesselDynamics
@@ -398,9 +426,11 @@ class VesselAgent:
 # DIGITAL TWIN DOMAIN
 # =============================================================================
 
+
 @dataclass
 class AISReading:
     """Automatic Identification System reading."""
+
     vessel_id: int
     timestamp: float
     reported_position: Tuple[float, float]
@@ -411,16 +441,18 @@ class AISReading:
 
     def discrepancy(self, estimated: VesselState) -> float:
         pos_diff = np.sqrt(
-            (self.reported_position[0] - estimated.x)**2 +
-            (self.reported_position[1] - estimated.y)**2
+            (self.reported_position[0] - estimated.x) ** 2
+            + (self.reported_position[1] - estimated.y) ** 2
         )
         heading_diff = abs(self.reported_heading - estimated.heading)
         speed_diff = abs(self.reported_speed - estimated.speed)
         return pos_diff + heading_diff * 100 + speed_diff * 10
 
+
 @dataclass
 class RadarTrack:
     """Radar/ARPA track."""
+
     track_id: int
     timestamp: float
     position: Tuple[float, float]
@@ -428,9 +460,11 @@ class RadarTrack:
     confidence: float = 1.0
     associated_vessel: Optional[int] = None
 
+
 @dataclass
 class VesselStateEstimate:
     """Digital twin state estimate for a vessel."""
+
     vessel_id: int
     estimated_state: VesselState
     covariance: NDArray
@@ -449,9 +483,11 @@ class VesselStateEstimate:
     def is_reliable(self, threshold: float = 0.5) -> bool:
         return self.overall_confidence >= threshold
 
+
 @dataclass
 class MaritimeDigitalTwin:
     """Digital twin for maritime traffic scene."""
+
     scene_id: str
     timestamp: float
 
@@ -474,7 +510,9 @@ class MaritimeDigitalTwin:
     def get_estimate(self, vessel_id: int) -> Optional[VesselStateEstimate]:
         return self.vessel_estimates.get(vessel_id)
 
-    def get_fallback_estimate(self, vessel_id: int, last_known: VesselState, dt: float) -> VesselState:
+    def get_fallback_estimate(
+        self, vessel_id: int, last_known: VesselState, dt: float
+    ) -> VesselState:
         """Dead reckoning fallback when sensors fail."""
         return VesselState(
             vessel_id=vessel_id,
@@ -484,10 +522,12 @@ class MaritimeDigitalTwin:
             speed=last_known.speed,
         )
 
+
 @dataclass
 class DigitalTwinConfig:
     """Configuration for maritime digital twin."""
-    estimator_type: str = 'kalman'
+
+    estimator_type: str = "kalman"
     prediction_horizon: float = 300.0
     prediction_step: float = 10.0
 
@@ -505,9 +545,11 @@ class DigitalTwinConfig:
 # ENCOUNTER GRAPH DOMAIN
 # =============================================================================
 
+
 @dataclass
 class EncounterGraph:
     """Dynamic graph representation of maritime scene."""
+
     timestamp: float
 
     # Nodes: vessels
@@ -524,6 +566,7 @@ class EncounterGraph:
         try:
             from torch_geometric.data import Data
             import torch
+
             return Data(
                 x=torch.tensor(self.node_features, dtype=torch.float32),
                 edge_index=torch.tensor(self.edge_index, dtype=torch.long),
@@ -548,9 +591,11 @@ class EncounterGraph:
 # ENVIRONMENT DOMAIN
 # =============================================================================
 
+
 @dataclass
 class MaritimeScene:
     """Complete maritime traffic scene."""
+
     scene_id: str
     timestamp: float
 
@@ -583,21 +628,23 @@ class MaritimeScene:
             other_state = other.current_state
             if other_state is None:
                 continue
-            dist = np.sqrt((state.x - other_state.x)**2 + (state.y - other_state.y)**2)
+            dist = np.sqrt((state.x - other_state.x) ** 2 + (state.y - other_state.y) ** 2)
             if dist < (vessel.specification.length + other.specification.length) / 2:
                 return True
 
         # Check obstacles
         for ox, oy, oradius in self.obstacles:
-            dist = np.sqrt((state.x - ox)**2 + (state.y - oy)**2)
+            dist = np.sqrt((state.x - ox) ** 2 + (state.y - oy) ** 2)
             if dist < oradius:
                 return True
 
         return False
 
+
 @dataclass
 class SceneTransition:
     """Single environment transition."""
+
     scene: MaritimeScene
     observations: Dict[int, VesselObservation]
     actions: Dict[int, VesselAction]
@@ -608,16 +655,18 @@ class SceneTransition:
     done: bool
     info: Dict
 
+
 @dataclass
 class VoyageEpisode:
     """Complete voyage episode."""
+
     episode_id: str
     transitions: List[SceneTransition]
     total_reward: float
     length: int
 
     # Metrics
-    min_cpa: float = float('inf')
+    min_cpa: float = float("inf")
     colregs_violations: int = 0
     fuel_consumed: float = 0.0
     time_to_destination: float = 0.0
@@ -625,18 +674,19 @@ class VoyageEpisode:
 
     def compute_metrics(self) -> Dict[str, float]:
         return {
-            'min_cpa': self.min_cpa,
-            'colregs_violations': self.colregs_violations,
-            'fuel_consumed': self.fuel_consumed,
-            'time_to_destination': self.time_to_destination,
-            'communication_success_rate': self.communication_success_rate,
-            'average_reward': self.total_reward / max(self.length, 1),
+            "min_cpa": self.min_cpa,
+            "colregs_violations": self.colregs_violations,
+            "fuel_consumed": self.fuel_consumed,
+            "time_to_destination": self.time_to_destination,
+            "communication_success_rate": self.communication_success_rate,
+            "average_reward": self.total_reward / max(self.length, 1),
         }
 
 
 # =============================================================================
 # RESILIENCE & METRICS DOMAIN
 # =============================================================================
+
 
 @dataclass
 class CoordinationResilienceMetrics:
@@ -661,8 +711,8 @@ class CoordinationResilienceMetrics:
             return 0.0
         area = 0.0
         for i in range(len(self.degradation_levels) - 1):
-            dx = abs(self.degradation_levels[i+1] - self.degradation_levels[i])
-            avg_y = (self.safety_scores[i] + self.safety_scores[i+1]) / 2
+            dx = abs(self.degradation_levels[i + 1] - self.degradation_levels[i])
+            avg_y = (self.safety_scores[i] + self.safety_scores[i + 1]) / 2
             area += dx * avg_y
         span = abs(self.degradation_levels[-1] - self.degradation_levels[0])
         return area / max(span, 1e-6)
@@ -674,16 +724,18 @@ class CoordinationResilienceMetrics:
         mid_idx = len(self.degradation_levels) // 2
         return self.safety_scores[mid_idx] > threshold * self.baseline_safety_score
 
+
 @dataclass
 class GracefulDegradationReport:
     """Report on graceful degradation performance."""
+
     vessel_id: int
     full_comms_score: float
     half_comms_score: float
     no_comms_score: float
 
-    fallback_strategy: str          # 'kinematic_inference', 'rule_based', 'conservative'
-    fallback_effectiveness: float   # 0.0 to 1.0
+    fallback_strategy: str  # 'kinematic_inference', 'rule_based', 'conservative'
+    fallback_effectiveness: float  # 0.0 to 1.0
 
     colregs_compliance_under_degradation: float
     safety_margin_maintained: bool
@@ -693,21 +745,24 @@ class GracefulDegradationReport:
 # CONFIGURATION & RESULTS
 # =============================================================================
 
+
 @dataclass
 class MaritimeExperimentConfig:
     """Top-level experiment configuration."""
 
     # Scene
     n_vessels: int = 10
-    scenario_type: str = 'channel'
+    scenario_type: str = "channel"
     boundaries: Tuple[float, float, float, float] = (-5000, 5000, -5000, 5000)
 
     # Vessels
-    vessel_types: List[VesselType] = field(default_factory=lambda: [VesselType.CARGO, VesselType.USV])
+    vessel_types: List[VesselType] = field(
+        default_factory=lambda: [VesselType.CARGO, VesselType.USV]
+    )
     heterogeneous: bool = True
 
     # Training
-    algorithm: str = 'MAPPO'
+    algorithm: str = "MAPPO"
     n_episodes: int = 1000
     episode_length: int = 500
     learning_rate: float = 3e-4
@@ -723,11 +778,13 @@ class MaritimeExperimentConfig:
 
     # Digital Twin
     dt_enabled: bool = True
-    dt_estimator: str = 'kalman'
-    dt_fallback_mode: str = 'kinematic_inference'
+    dt_estimator: str = "kalman"
+    dt_fallback_mode: str = "kinematic_inference"
 
     # Resilience testing
-    test_degradation_levels: List[float] = field(default_factory=lambda: [1.0, 0.8, 0.6, 0.4, 0.2, 0.0])
+    test_degradation_levels: List[float] = field(
+        default_factory=lambda: [1.0, 0.8, 0.6, 0.4, 0.2, 0.0]
+    )
 
     # COLREGs
     colregs_reward_weight: float = 1.0
@@ -735,13 +792,15 @@ class MaritimeExperimentConfig:
     efficiency_reward_weight: float = 1.0
 
     # Logging
-    log_dir: str = './logs'
+    log_dir: str = "./logs"
     checkpoint_frequency: int = 50
     eval_frequency: int = 25
+
 
 @dataclass
 class MaritimeExperimentResult:
     """Complete experiment results."""
+
     config: MaritimeExperimentConfig
     episodes: List[VoyageEpisode] = field(default_factory=list)
 
@@ -749,7 +808,9 @@ class MaritimeExperimentResult:
     final_policies: Dict[int, Callable] = field(default_factory=dict)
 
     # Metrics
-    resilience_metrics: CoordinationResilienceMetrics = field(default_factory=CoordinationResilienceMetrics)
+    resilience_metrics: CoordinationResilienceMetrics = field(
+        default_factory=CoordinationResilienceMetrics
+    )
     graceful_degradation_reports: List[GracefulDegradationReport] = field(default_factory=list)
 
     # Training curves
@@ -763,21 +824,33 @@ class MaritimeExperimentResult:
 
     def save(self, path: str) -> None:
         import pickle
-        with open(path, 'wb') as f:
+
+        with open(path, "wb") as f:
             pickle.dump(self, f)
 
     @classmethod
-    def load(cls, path: str) -> 'MaritimeExperimentResult':
+    def load(cls, path: str) -> "MaritimeExperimentResult":
         import pickle
-        with open(path, 'rb') as f:
+
+        with open(path, "rb") as f:
             return pickle.load(f)
 
     def get_summary(self) -> Dict[str, float]:
         return {
-            'n_episodes': len(self.episodes),
-            'final_avg_reward': float(np.mean(self.eval_rewards[-10:])) if self.eval_rewards else 0.0,
-            'resilience_index': self.resilience_metrics.resilience_index(),
-            'is_graceful': self.resilience_metrics.is_graceful(),
-            'avg_colregs_violations': float(np.mean([ep.colregs_violations for ep in self.episodes])) if self.episodes else 0.0,
-            'avg_min_cpa': float(np.mean([ep.min_cpa for ep in self.episodes if ep.min_cpa < float('inf')])) if self.episodes else 0.0,
+            "n_episodes": len(self.episodes),
+            "final_avg_reward": (
+                float(np.mean(self.eval_rewards[-10:])) if self.eval_rewards else 0.0
+            ),
+            "resilience_index": self.resilience_metrics.resilience_index(),
+            "is_graceful": self.resilience_metrics.is_graceful(),
+            "avg_colregs_violations": (
+                float(np.mean([ep.colregs_violations for ep in self.episodes]))
+                if self.episodes
+                else 0.0
+            ),
+            "avg_min_cpa": (
+                float(np.mean([ep.min_cpa for ep in self.episodes if ep.min_cpa < float("inf")]))
+                if self.episodes
+                else 0.0
+            ),
         }

@@ -15,6 +15,7 @@ from marlin_twin.envs.maritime_coord_env import MaritimeCoordEnv
 from marlin_twin.baselines.factory import BaselineFactory
 from marlin_twin.utils.metrics import compute_resilience_index
 
+
 def main():
     print("=== MARLIN-Twin Phase 6 Validation Suite ===")
 
@@ -24,13 +25,13 @@ def main():
         "marlin_twin": "MARLIN-Twin (Proposed GAT)",
         "independent_ppo": "Independent PPO (IPPO)",
         "maddpg": "MADDPG Baseline",
-        "rule_based": "Rule-Based COLREGs"
+        "rule_based": "Rule-Based COLREGs",
     }
     alg_colors = {
         "marlin_twin": "#1f77b4",
         "independent_ppo": "#ff7f0e",
         "maddpg": "#2ca02c",
-        "rule_based": "#d62728"
+        "rule_based": "#d62728",
     }
 
     sweep_results = {alg: [] for alg in algorithms}
@@ -51,7 +52,6 @@ def main():
             obs, _ = env.reset(seed=42)
             done = False
             ep_rewards = []
-            min_cpas = []
 
             while not done:
                 actions = {}
@@ -60,14 +60,17 @@ def main():
                     if alg == "rule_based":
                         act_vec = pol.act(agent_obs)
                     else:
-                        act_vec = pol.act(np.random.randn(32).astype(np.float32), deterministic=True)
+                        act_vec = pol.act(
+                            np.random.randn(32).astype(np.float32), deterministic=True
+                        )
 
                     from marlin_twin.data_classes import VesselAction
+
                     actions[vid] = VesselAction(
                         vessel_id=vid,
                         propeller_rpm=float(act_vec[0] * 0.5 + 0.5),
                         rudder_angle=float(act_vec[1] * 0.5),
-                        message_targets=[]
+                        message_targets=[],
                     )
 
                 obs, rewards, team_reward, done, info = env.step(actions)
@@ -91,14 +94,14 @@ def main():
         ax1.plot(
             degradation_levels,
             sweep_results[alg],
-            'o-',
+            "o-",
             linewidth=2.2,
             color=alg_colors[alg],
-            label=f"{alg_labels[alg]} (R={resilience_indices[alg]:.2f})"
+            label=f"{alg_labels[alg]} (R={resilience_indices[alg]:.2f})",
         )
 
-    ax1.axhline(0.70, color='gray', linestyle=':', label="Target Sub-Linear Threshold (R >= 0.70)")
-    ax1.set_title("Safety Score J(lambda) vs. Communication Degradation", fontweight='bold')
+    ax1.axhline(0.70, color="gray", linestyle=":", label="Target Sub-Linear Threshold (R >= 0.70)")
+    ax1.set_title("Safety Score J(lambda) vs. Communication Degradation", fontweight="bold")
     ax1.set_xlabel("Communication Quality (lambda)")
     ax1.set_ylabel("Normalized Safety Score J(lambda)")
     ax1.set_xlim(1.05, -0.05)
@@ -109,13 +112,13 @@ def main():
     bars = ax2.bar(
         [alg_labels[a] for a in algorithms],
         [resilience_indices[a] for a in algorithms],
-        color=[alg_colors[a] for a in algorithms]
+        color=[alg_colors[a] for a in algorithms],
     )
-    ax2.set_title("Coordination Resilience Index (R_resilience)", fontweight='bold')
+    ax2.set_title("Coordination Resilience Index (R_resilience)", fontweight="bold")
     ax2.set_ylabel("Resilience Index Score")
     ax2.set_ylim(0.0, 1.1)
-    plt.setp(ax2.get_xticklabels(), rotation=25, ha='right')
-    ax2.grid(True, axis='y', linestyle="--", alpha=0.5)
+    plt.setp(ax2.get_xticklabels(), rotation=25, ha="right")
+    ax2.grid(True, axis="y", linestyle="--", alpha=0.5)
 
     for bar in bars:
         height = bar.get_height()
@@ -124,9 +127,9 @@ def main():
             xy=(bar.get_x() + bar.get_width() / 2, height),
             xytext=(0, 3),
             textcoords="offset points",
-            ha='center',
-            va='bottom',
-            fontweight='bold'
+            ha="center",
+            va="bottom",
+            fontweight="bold",
         )
 
     os.makedirs("figures", exist_ok=True)
@@ -137,6 +140,7 @@ def main():
 
     print(f"\nValidation plots saved to: {out_path}")
     print("=== Phase 6 Validation Completed Successfully! ===")
+
 
 if __name__ == "__main__":
     main()

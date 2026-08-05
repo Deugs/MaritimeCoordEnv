@@ -1,15 +1,16 @@
-# ============================================================================
-# FILE: marlin_twin/envs/sensors.py
-# ============================================================================
+"""AIS and radar sensor simulation with realistic noise models."""
 
 import numpy as np
 from marlin_twin.data_classes import VesselState, AISReading, RadarTrack
+
 
 class SensorSimulator:
     """Simulates AIS and marine radar sensor observations with realistic noise."""
 
     @staticmethod
-    def generate_ais(state: VesselState, timestamp: float, drop_prob: float = 0.05) -> AISReading | None:
+    def generate_ais(
+        state: VesselState, timestamp: float, drop_prob: float = 0.05
+    ) -> AISReading | None:
         if np.random.rand() < drop_prob:
             return None  # Packet dropped
 
@@ -24,7 +25,7 @@ class SensorSimulator:
             reported_position=(float(state.x + pos_noise[0]), float(state.y + pos_noise[1])),
             reported_heading=float((state.heading + heading_noise + np.pi) % (2 * np.pi) - np.pi),
             reported_speed=float(max(0.0, state.speed + speed_noise)),
-            confidence=0.95
+            confidence=0.95,
         )
 
     @staticmethod
@@ -40,15 +41,12 @@ class SensorSimulator:
             position=(float(state.x + pos_noise[0]), float(state.y + pos_noise[1])),
             velocity=(float(vel_vec[0] + vel_noise[0]), float(vel_vec[1] + vel_noise[1])),
             confidence=0.85,
-            associated_vessel=state.vessel_id
+            associated_vessel=state.vessel_id,
         )
 
     @classmethod
     def generate_scene_sensors(
-        cls,
-        vessels: dict[int, VesselState],
-        timestamp: float,
-        ais_drop_prob: float = 0.05
+        cls, vessels: dict[int, VesselState], timestamp: float, ais_drop_prob: float = 0.05
     ) -> tuple[dict[int, AISReading], list[RadarTrack]]:
         """Generate full sensor readings across all vessels in scene."""
         ais_readings = {}

@@ -14,6 +14,7 @@ from marlin_twin.data.ais_loader import AISDataLoader
 from marlin_twin.envs.digital_twin import DigitalTwinEstimator
 from marlin_twin.data_classes import DigitalTwinConfig
 
+
 def main():
     print("=== MARLIN-Twin Real AIS Data Validation Suite ===")
 
@@ -50,7 +51,7 @@ def main():
                 timestamp=float(i * dt),
                 reported_position=meas_pos,
                 reported_heading=true_st.heading,
-                reported_speed=true_st.speed
+                reported_speed=true_st.speed,
             )
 
         twin = estimator.update(
@@ -58,7 +59,7 @@ def main():
             timestamp=float(i * dt),
             actual_states=actual_states,
             ais_readings=ais_readings,
-            radar_tracks=[]
+            radar_tracks=[],
         )
 
         est_state = twin.vessel_estimates[1].estimated_state
@@ -70,9 +71,9 @@ def main():
     est_xs = np.array(est_xs)
     est_ys = np.array(est_ys)
 
-    pos_errors = np.sqrt((true_xs - est_xs)**2 + (true_ys - est_ys)**2)
+    pos_errors = np.sqrt((true_xs - est_xs) ** 2 + (true_ys - est_ys) ** 2)
     overall_rmse = float(np.sqrt(np.mean(pos_errors**2)))
-    blackout_rmse = float(np.sqrt(np.mean(pos_errors[outage_mask]**2)))
+    blackout_rmse = float(np.sqrt(np.mean(pos_errors[outage_mask] ** 2)))
 
     print(f"   Overall EKF Position RMSE:       {overall_rmse:.2f} meters")
     print(f"   300s Blackout DR Position RMSE:  {blackout_rmse:.2f} meters")
@@ -81,14 +82,16 @@ def main():
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13, 5))
 
     # Trajectory Plot
-    ax1.plot(true_ys, true_xs, 'k-', linewidth=2, label="Ground-Truth AIS Trajectory")
-    ax1.plot(est_ys, est_xs, 'b--', linewidth=2, label="EKF/JPDA Digital Twin Estimate")
+    ax1.plot(true_ys, true_xs, "k-", linewidth=2, label="Ground-Truth AIS Trajectory")
+    ax1.plot(est_ys, est_xs, "b--", linewidth=2, label="EKF/JPDA Digital Twin Estimate")
 
     # Highlight outage region
     outage_indices = np.where(outage_mask)[0]
-    ax1.plot(est_ys[outage_indices], est_xs[outage_indices], 'r.', label="AIS Outage (Dead Reckoning)")
+    ax1.plot(
+        est_ys[outage_indices], est_xs[outage_indices], "r.", label="AIS Outage (Dead Reckoning)"
+    )
 
-    ax1.set_title("Real AIS Trajectory Tracking under Outage", fontweight='bold')
+    ax1.set_title("Real AIS Trajectory Tracking under Outage", fontweight="bold")
     ax1.set_xlabel("East (y) [meters]")
     ax1.set_ylabel("North (x) [meters]")
     ax1.grid(True, linestyle="--", alpha=0.5)
@@ -96,9 +99,9 @@ def main():
 
     # Error over Time
     time_axis = np.arange(len(vessel_states)) * 10.0
-    ax2.plot(time_axis, pos_errors, 'r-', linewidth=2, label="Position Estimation Error (m)")
-    ax2.axvspan(400, 700, color='red', alpha=0.15, label="300s AIS Blackout Region")
-    ax2.set_title("Tracking Position Error over Time", fontweight='bold')
+    ax2.plot(time_axis, pos_errors, "r-", linewidth=2, label="Position Estimation Error (m)")
+    ax2.axvspan(400, 700, color="red", alpha=0.15, label="300s AIS Blackout Region")
+    ax2.set_title("Tracking Position Error over Time", fontweight="bold")
     ax2.set_xlabel("Time [seconds]")
     ax2.set_ylabel("Position Error [meters]")
     ax2.grid(True, linestyle="--", alpha=0.5)
@@ -112,6 +115,7 @@ def main():
 
     print(f"\nValidation plot saved to: {out_path}")
     print("=== Real AIS Validation Completed Successfully! ===")
+
 
 if __name__ == "__main__":
     main()

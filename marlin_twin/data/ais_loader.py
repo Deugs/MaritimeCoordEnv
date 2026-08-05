@@ -1,11 +1,11 @@
-# ============================================================================
-# FILE: marlin_twin/data/ais_loader.py
-# ============================================================================
+"""Open AIS dataset loading and conversion to VesselState trajectories."""
 
 import os
 import numpy as np
 import pandas as pd
 from marlin_twin.data_classes import VesselState
+from marlin_twin.utils.seeding import seed_everything
+
 
 class AISDataLoader:
     """
@@ -14,7 +14,9 @@ class AISDataLoader:
     """
 
     @staticmethod
-    def latlon_to_meters(lat: float, lon: float, ref_lat: float, ref_lon: float) -> tuple[float, float]:
+    def latlon_to_meters(
+        lat: float, lon: float, ref_lat: float, ref_lon: float
+    ) -> tuple[float, float]:
         """Converts Geographic (Lat, Lon) to Local Flat-Earth ENU coordinates in meters."""
         R = 6371000.0  # Earth radius in meters
         dlat = np.radians(lat - ref_lat)
@@ -26,7 +28,7 @@ class AISDataLoader:
     @staticmethod
     def generate_sample_ais_trajectory(n_steps: int = 100, seed: int = 42) -> pd.DataFrame:
         """Generates a realistic synthetic AIS trajectory simulating real vessel movement."""
-        np.random.seed(seed)
+        seed_everything(seed)
         times = np.arange(0, n_steps * 10, 10)  # 10s intervals
         ref_lat, ref_lon = 37.7749, -122.4194  # San Francisco Bay
 
@@ -48,16 +50,18 @@ class AISDataLoader:
         lats = ref_lat + np.degrees(xs / R)
         lons = ref_lon + np.degrees(ys / (R * np.cos(np.radians(ref_lat))))
 
-        df = pd.DataFrame({
-            "MMSI": 367123456,
-            "BaseDateTime": pd.date_range("2026-01-01 12:00:00", periods=n_steps, freq="10s"),
-            "LAT": lats,
-            "LON": lons,
-            "SOG": speed_knots,
-            "COG": heading_deg,
-            "Heading": heading_deg,
-            "VesselName": "REAL_AIS_VESSEL_01"
-        })
+        df = pd.DataFrame(
+            {
+                "MMSI": 367123456,
+                "BaseDateTime": pd.date_range("2026-01-01 12:00:00", periods=n_steps, freq="10s"),
+                "LAT": lats,
+                "LON": lons,
+                "SOG": speed_knots,
+                "COG": heading_deg,
+                "Heading": heading_deg,
+                "VesselName": "REAL_AIS_VESSEL_01",
+            }
+        )
         return df
 
     @classmethod
@@ -87,13 +91,7 @@ class AISDataLoader:
             speed = float(row["SOG"]) * 0.514444  # Knots to m/s
             heading = float(np.radians(row["COG"]))
 
-            st = VesselState(
-                vessel_id=vessel_id,
-                x=x,
-                y=y,
-                heading=heading,
-                speed=speed
-            )
+            st = VesselState(vessel_id=vessel_id, x=x, y=y, heading=heading, speed=speed)
             states.append(st)
 
         return states

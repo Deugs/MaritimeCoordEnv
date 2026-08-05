@@ -1,11 +1,10 @@
-# ============================================================================
-# FILE: marlin_twin/agents/policies.py
-# ============================================================================
+"""GAT-based and ablation RL policies for MARLIN-Twin agents."""
 
 import numpy as np
 import torch
 import torch.optim as optim
 from marlin_twin.agents.networks import ActorCriticNet, GATEncoder
+
 
 class GATPolicy:
     """GAT-based Policy for MARLIN-Twin agents."""
@@ -13,7 +12,9 @@ class GATPolicy:
     def __init__(self, obs_dim: int = 32, action_dim: int = 2, lr: float = 3e-4):
         self.encoder = GATEncoder(in_features=6, edge_features=4, hidden_dim=32)
         self.net = ActorCriticNet(obs_dim=obs_dim, action_dim=action_dim, hidden_dim=64)
-        self.optimizer = optim.Adam(list(self.net.parameters()) + list(self.encoder.parameters()), lr=lr)
+        self.optimizer = optim.Adam(
+            list(self.net.parameters()) + list(self.encoder.parameters()), lr=lr
+        )
 
     def act(self, observation: np.ndarray, deterministic: bool = False) -> np.ndarray:
         self.net.eval()
@@ -37,7 +38,9 @@ class GATPolicy:
             act_vec = torch.tanh(action).squeeze(0).numpy()
             return act_vec, float(value.item()), float(log_prob)
 
-    def evaluate_tensors(self, observations: torch.Tensor, actions: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def evaluate_tensors(
+        self, observations: torch.Tensor, actions: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         self.net.train()
         mean, std, values = self.net(observations)
         dist = torch.distributions.Normal(mean, std)
@@ -45,7 +48,9 @@ class GATPolicy:
         entropy = dist.entropy().sum(dim=-1, keepdim=True)
         return values, log_probs, entropy
 
-    def evaluate(self, observations: np.ndarray, actions: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def evaluate(
+        self, observations: np.ndarray, actions: np.ndarray
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         self.net.eval()
         with torch.no_grad():
             obs_t = torch.tensor(observations, dtype=torch.float32)
@@ -83,7 +88,9 @@ class MeanPoolingPolicy(GATPolicy):
             action = mean if deterministic else torch.normal(mean, std)
             return torch.tanh(action).squeeze(0).numpy()
 
-    def evaluate_tensors(self, observations: torch.Tensor, actions: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def evaluate_tensors(
+        self, observations: torch.Tensor, actions: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         self.net.train()
         obs_mod = observations.clone()
         if obs_mod.shape[-1] >= 22:
@@ -110,4 +117,3 @@ class MLPPolicy(GATPolicy):
             mean, std, _ = self.net(obs_t)
             action = mean if deterministic else torch.normal(mean, std)
             return torch.tanh(action).squeeze(0).numpy()
-

@@ -1,16 +1,18 @@
-# ============================================================================
-# FILE: marlin_twin/training/mappo.py
-# ============================================================================
+"""Multi-Agent PPO (MAPPO) trainer with centralized critic, decentralized actors."""
+
+import os
 
 import numpy as np
 import torch
 import torch.nn as nn
+from loguru import logger
 from marlin_twin.data_classes import MaritimeExperimentConfig
 from marlin_twin.api import BaseTrainer, BaseMaritimeEnvironment, Policy
 from marlin_twin.agents.policies import GATPolicy
 from marlin_twin.agents.observation_builder import ObservationBuilder
 from marlin_twin.agents.vessel_agent import VesselAgentWrapper
 from marlin_twin.training.rollout_buffer import RolloutBuffer
+
 
 class MAPPOTrainer(BaseTrainer):
     """
@@ -27,9 +29,9 @@ class MAPPOTrainer(BaseTrainer):
         if not self.policies:
             self.policies = {i: GATPolicy() for i in range(n_vessels)}
 
-        print(f"[MAPPO] Initialized PPO gradient training loop for {n_vessels} agents over {n_episodes} episodes...")
+        logger.info(f"[MAPPO] PPO training: {n_vessels} agents, {n_episodes} episodes...")
 
-        buffer = RolloutBuffer(buffer_size=self.config.episode_length, n_agents=n_vessels)
+        buffer = RolloutBuffer(buffer_size=self.config.episode_length, n_vessels=n_vessels)
 
         for ep in range(n_episodes):
             obs, info = env.reset(seed=ep)
@@ -63,7 +65,9 @@ class MAPPOTrainer(BaseTrainer):
 
                 obs_arr = np.array(obs_vecs, dtype=np.float32)
                 act_arr = np.array(act_vecs, dtype=np.float32)
-                rew_arr = np.array([rewards.get(i, 0.0) for i in range(n_vessels)], dtype=np.float32)
+                rew_arr = np.array(
+                    [rewards.get(i, 0.0) for i in range(n_vessels)], dtype=np.float32
+                )
                 val_arr = np.array(val_vecs, dtype=np.float32)
                 logp_arr = np.array(logp_vecs, dtype=np.float32)
 
@@ -76,11 +80,17 @@ class MAPPOTrainer(BaseTrainer):
             for vid in range(n_vessels):
                 pol = self.policies[vid]
                 if hasattr(pol, "optimizer") and hasattr(pol, "evaluate_tensors"):
-                    obs_t = torch.tensor(buffer.obs_buf[:buffer.ptr, vid], dtype=torch.float32)
-                    act_t = torch.tensor(buffer.act_buf[:buffer.ptr, vid], dtype=torch.float32)
-                    ret_t = torch.tensor(buffer.ret_buf[:buffer.ptr, vid], dtype=torch.float32).unsqueeze(-1)
-                    adv_t = torch.tensor(buffer.adv_buf[:buffer.ptr, vid], dtype=torch.float32).unsqueeze(-1)
-                    old_logp_t = torch.tensor(buffer.logp_buf[:buffer.ptr, vid], dtype=torch.float32).unsqueeze(-1)
+                    obs_t = torch.tensor(buffer.obs_buf[: buffer.ptr, vid], dtype=torch.float32)
+                    act_t = torch.tensor(buffer.act_buf[: buffer.ptr, vid], dtype=torch.float32)
+                    ret_t = torch.tensor(
+                        buffer.ret_buf[: buffer.ptr, vid], dtype=torch.float32
+                    ).unsqueeze(-1)
+                    adv_t = torch.tensor(
+                        buffer.adv_buf[: buffer.ptr, vid], dtype=torch.float32
+                    ).unsqueeze(-1)
+                    old_logp_t = torch.tensor(
+                        buffer.logp_buf[: buffer.ptr, vid], dtype=torch.float32
+                    ).unsqueeze(-1)
 
                     for _ in range(4):  # PPO update epochs
                         values, log_probs, entropy = pol.evaluate_tensors(obs_t, act_t)
@@ -100,7 +110,7 @@ class MAPPOTrainer(BaseTrainer):
                         pol.optimizer.step()
 
             if ep % max(1, self.config.eval_frequency) == 0 or ep == n_episodes - 1:
-                print(f"Episode {ep}/{n_episodes} - Team Reward: {ep_reward:.2f}")
+                logger.info(f"Episode {ep}/{n_episodes} - Team Reward: {ep_reward:.2f}")
 
         return self.policies
 
@@ -109,7 +119,7 @@ class MAPPOTrainer(BaseTrainer):
         env: BaseMaritimeEnvironment,
         policies: dict[int, Policy],
         n_episodes: int = 100,
-        communication_degradation: float = 1.0
+        communication_degradation: float = 1.0,
     ) -> dict[str, float]:
         env.set_communication_degradation(communication_degradation)
         total_rewards = []
@@ -142,21 +152,17 @@ class MAPPOTrainer(BaseTrainer):
             "safety_score": safety_score,
             "efficiency_score": 0.85,
             "colregs_violation_rate": 0.05,
-            "communication_utilization": communication_degradation * 0.7
+            "communication_utilization": communication_degradation * 0.7,
         }
 
     def save_checkpoint(self, filepath: str) -> None:
         """Saves PyTorch model state dicts for all policies to a checkpoint file."""
-        import os
-        import torch
         os.makedirs(os.path.dirname(os.path.abspath(filepath)), exist_ok=True)
         checkpoint_data = {vid: pol.get_state() for vid, pol in self.policies.items()}
         torch.save(checkpoint_data, filepath)
 
     def load_checkpoint(self, filepath: str) -> None:
         """Loads PyTorch model state dicts from a checkpoint file."""
-        import os
-        import torch
         if not os.path.exists(filepath):
             raise FileNotFoundError(f"Checkpoint file not found: {filepath}")
         checkpoint_data = torch.load(filepath)

@@ -1,12 +1,11 @@
-# ============================================================================
-# FILE: marlin_twin/agents/observation_builder.py
-# ============================================================================
+"""Flattens structured VesselObservation dataclasses into fixed-size tensors."""
 
 import numpy as np
 from marlin_twin.data_classes import VesselObservation
 
+
 class ObservationBuilder:
-    """Flattens structured VesselObservation dataclasses into fixed-size tensors for neural network consumption."""
+    """Flattens structured VesselObservation dataclasses into fixed-size NN input tensors."""
 
     @staticmethod
     def to_vector(obs: VesselObservation, vector_dim: int = 32) -> np.ndarray:
@@ -22,18 +21,16 @@ class ObservationBuilder:
         for nid, nstate in list(obs.neighbor_states.items())[:4]:
             if idx + 4 <= vector_dim:
                 vec[idx] = (nstate.x - obs.own_state.x) / 5000.0
-                vec[idx+1] = (nstate.y - obs.own_state.y) / 5000.0
-                vec[idx+2] = nstate.heading / np.pi
-                vec[idx+3] = nstate.speed / 15.0
+                vec[idx + 1] = (nstate.y - obs.own_state.y) / 5000.0
+                vec[idx + 2] = nstate.heading / np.pi
+                vec[idx + 3] = nstate.speed / 15.0
                 idx += 4
 
         return vec
 
     @staticmethod
     def build_observation(
-        vessel_id: int,
-        all_states: dict,
-        twin_estimates: dict | None = None
+        vessel_id: int, all_states: dict, twin_estimates: dict | None = None
     ) -> VesselObservation:
         """Construct structured VesselObservation dataclass."""
         own_state = all_states[vessel_id]
@@ -45,7 +42,7 @@ class ObservationBuilder:
             own_state=own_state,
             neighbor_states=neighbor_states,
             digital_twin_estimate=twin_est,
-            received_messages=[]
+            received_messages=[],
         )
 
     @staticmethod
@@ -56,14 +53,22 @@ class ObservationBuilder:
             from torch_geometric.data import Data
 
             v_ids = list(scene_states.keys())
-            id_map = {vid: idx for idx, vid in enumerate(v_ids)}
             num_nodes = len(v_ids)
 
             # Node features (N x 6)
             node_feats = []
             for vid in v_ids:
                 st = scene_states[vid]
-                node_feats.append([st.x / 5000.0, st.y / 5000.0, st.heading / np.pi, st.speed / 15.0, st.surge_velocity / 15.0, st.yaw_rate])
+                node_feats.append(
+                    [
+                        st.x / 5000.0,
+                        st.y / 5000.0,
+                        st.heading / np.pi,
+                        st.speed / 15.0,
+                        st.surge_velocity / 15.0,
+                        st.yaw_rate,
+                    ]
+                )
 
             x = torch.tensor(node_feats, dtype=torch.float)
 
@@ -76,7 +81,9 @@ class ObservationBuilder:
                         edge_dst.append(j)
                         st_i, st_j = scene_states[v_ids[i]], scene_states[v_ids[j]]
                         dist = np.linalg.norm(st_j.position() - st_i.position()) / 5000.0
-                        bearing = (np.arctan2(st_j.x - st_i.x, st_j.y - st_i.y) - st_i.heading + np.pi) % (2 * np.pi) - np.pi
+                        bearing = (
+                            np.arctan2(st_j.x - st_i.x, st_j.y - st_i.y) - st_i.heading + np.pi
+                        ) % (2 * np.pi) - np.pi
                         edge_attrs.append([dist, bearing / np.pi, st_j.speed / 15.0, 0.0])
 
             edge_index = torch.tensor([edge_src, edge_dst], dtype=torch.long)

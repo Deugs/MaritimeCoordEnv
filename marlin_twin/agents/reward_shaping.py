@@ -1,9 +1,12 @@
-# ============================================================================
-# FILE: marlin_twin/agents/reward_shaping.py
-# ============================================================================
+"""Fine-grained COLREGs reward shaping."""
 
-import numpy as np
-from marlin_twin.data_classes import VesselState, VesselAction, Encounter, EncounterType, COLREGsRule
+from marlin_twin.data_classes import (
+    VesselState,
+    VesselAction,
+    Encounter,
+    EncounterType,
+)
+
 
 class COLREGsRewardShaper:
     """
@@ -17,7 +20,7 @@ class COLREGsRewardShaper:
         encounters: list[Encounter],
         w_safety: float = 2.0,
         w_colregs: float = 1.0,
-        w_efficiency: float = 1.0
+        w_efficiency: float = 1.0,
     ) -> float:
         r_safety = 0.0
         r_colregs = 0.0
