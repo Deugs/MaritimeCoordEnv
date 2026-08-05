@@ -3,12 +3,14 @@
 # ============================================================================
 
 import streamlit as st
-import marlin_twin
 
 st.set_page_config(page_title="MARLIN-Twin Dashboard", layout="wide")
 
 st.title("⚓ MARLIN-Twin: Maritime Coordination Dashboard")
-st.markdown("> **Digital Twin MARL for Autonomous Vessel Traffic Coordination under Communication Degradation**")
+st.markdown(
+    "> **Digital Twin MARL for Autonomous Vessel Traffic Coordination "
+    "under Communication Degradation**"
+)
 
 st.sidebar.header("Configuration")
 scenario = st.sidebar.selectbox("Scenario Type", ["channel", "open_water", "port_approach"])
@@ -19,7 +21,10 @@ col1, col2 = st.subplots(2)
 
 with col1:
     st.subheader("Scene Overview")
-    st.info(f"Running **{scenario}** scenario with **{n_vessels}** vessels at **{comms_quality*100:.0f}%** bandwidth capacity.")
+    st.info(
+        f"Running **{scenario}** scenario with **{n_vessels}** vessels at "
+        f"**{comms_quality * 100:.0f}%** bandwidth capacity."
+    )
 
 with col2:
     st.subheader("System Status")

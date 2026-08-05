@@ -1,11 +1,12 @@
-# ============================================================================
-# FILE: marlin_twin/envs/communication.py
-# ============================================================================
+"""Bandwidth-constrained priority message transmission across vessels."""
 
 import numpy as np
 from marlin_twin.data_classes import (
-    MaritimeMessage, MessagePriority, MaritimeCommunicationChannel, CommunicationStatus
+    MaritimeMessage,
+    MessagePriority,
+    MaritimeCommunicationChannel,
 )
+
 
 class CommunicationChannelManager:
     """
@@ -18,14 +19,14 @@ class CommunicationChannelManager:
             channel_id="maritime_vhf_channel",
             bandwidth_bps=bandwidth_bps,
             base_latency=base_latency,
-            packet_loss_rate=0.05
+            packet_loss_rate=0.05,
         )
 
     def process_step(
         self,
         outgoing_messages: list[MaritimeMessage],
         weather_degradation: float = 0.0,
-        jamming_active: bool = False
+        jamming_active: bool = False,
     ) -> list[MaritimeMessage]:
         """Process one time step of message transmissions."""
         self.channel.weather_degradation = weather_degradation
@@ -54,7 +55,7 @@ class CommunicationChannelManager:
                         size_bits=msg.size_bits,
                         latency=self.channel.base_latency,
                         delivered=True,
-                        delivery_confirmed=True
+                        delivery_confirmed=True,
                     )
                     delivered.append(msg_delivered)
                     avail_bits -= msg.size_bits

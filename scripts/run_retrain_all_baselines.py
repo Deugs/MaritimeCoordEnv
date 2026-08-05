@@ -8,19 +8,22 @@ Usage:
 """
 
 import os
-import torch
-import numpy as np
+from pathlib import Path
+
 from marlin_twin.data_classes import MaritimeExperimentConfig
 from marlin_twin.envs.maritime_coord_env import MaritimeCoordEnv
 from marlin_twin.training.curriculum import TwoStageCurriculumTrainer
 from marlin_twin.agents.policies import GATPolicy, MeanPoolingPolicy, MLPPolicy
 
-def retrain_variant(variant_name: str, seeds: list[int], n_episodes: int = 250):
-    print(f"\n=======================================================")
-    print(f"   Retraining Variant: {variant_name.upper()} ({len(seeds)} Seeds)")
-    print(f"=======================================================")
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
-    os.makedirs("checkpoints", exist_ok=True)
+
+def retrain_variant(variant_name: str, seeds: list[int], n_episodes: int = 250):
+    print("\n=======================================================")
+    print(f"   Retraining Variant: {variant_name.upper()} ({len(seeds)} Seeds)")
+    print("=======================================================")
+
+    os.makedirs(os.path.join(REPO_ROOT, "checkpoints"), exist_ok=True)
 
     for seed in seeds:
         print(f"\n---> [{variant_name}] Training Seed {seed} for {n_episodes} Episodes...")
@@ -29,7 +32,7 @@ def retrain_variant(variant_name: str, seeds: list[int], n_episodes: int = 250):
             n_vessels=2,
             n_episodes=n_episodes,
             episode_length=40,
-            eval_frequency=100
+            eval_frequency=100,
         )
         env = MaritimeCoordEnv(config)
 
@@ -50,9 +53,10 @@ def retrain_variant(variant_name: str, seeds: list[int], n_episodes: int = 250):
 
         trainer.train_curriculum(env, total_episodes=n_episodes)
 
-        ckpt_path = os.path.join("checkpoints", f"{variant_name}_seed_{seed}.pt")
+        ckpt_path = os.path.join(REPO_ROOT, "checkpoints", f"{variant_name}_seed_{seed}.pt")
         trainer.save_checkpoint(ckpt_path)
         print(f"     Saved PyTorch Checkpoint -> {ckpt_path}")
+
 
 def main():
     print("=== MARLIN-Twin Multi-Seed Retraining Suite ===")
@@ -62,13 +66,14 @@ def main():
         "ablation_mean_pooling",
         "ablation_flat_mlp",
         "ablation_no_digital_twin",
-        "independent_ppo"
+        "independent_ppo",
     ]
 
     for var in variants:
         retrain_variant(var, seeds=seeds, n_episodes=250)
 
     print("\n=== Retraining Suite Completed Successfully! All Checkpoints Saved. ===")
+
 
 if __name__ == "__main__":
     main()

@@ -3,9 +3,9 @@
 # ============================================================================
 
 import os
-import pytest
 from marlin_twin.data_classes import MaritimeExperimentConfig
 from marlin_twin.training.mappo import MAPPOTrainer
+
 
 def test_mappo_save_load_checkpoint(tmp_path):
     config = MaritimeExperimentConfig(n_vessels=2)
@@ -13,6 +13,7 @@ def test_mappo_save_load_checkpoint(tmp_path):
     trainer.policies = {0: trainer.config.scenario_type, 1: trainer.config.scenario_type}
 
     from marlin_twin.agents.policies import GATPolicy
+
     trainer.policies = {0: GATPolicy(), 1: GATPolicy()}
 
     ckpt_file = os.path.join(tmp_path, "test_ckpt.pt")

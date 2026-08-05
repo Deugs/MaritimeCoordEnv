@@ -13,6 +13,7 @@ from marlin_twin.data_classes import MaritimeExperimentConfig
 from marlin_twin.envs.maritime_coord_env import MaritimeCoordEnv
 from marlin_twin.training.curriculum import TwoStageCurriculumTrainer
 
+
 def main():
     print("=== MARLIN-Twin Phase 5 Validation Suite ===")
 
@@ -22,7 +23,7 @@ def main():
         n_vessels=3,
         n_episodes=total_episodes,
         episode_length=40,
-        eval_frequency=20
+        eval_frequency=20,
     )
     env = MaritimeCoordEnv(config)
     trainer = TwoStageCurriculumTrainer(config)
@@ -35,28 +36,45 @@ def main():
     eval_full = trainer.evaluate(env, policies, n_episodes=10, communication_degradation=1.0)
     eval_deg = trainer.evaluate(env, policies, n_episodes=10, communication_degradation=0.5)
 
-    print(f"   Full Comms Safety Score:    {eval_full['safety_score']:.3f} | Mean Reward: {eval_full['average_reward']:.2f}")
-    print(f"   50% Comms Deg Safety Score: {eval_deg['safety_score']:.3f} | Mean Reward: {eval_deg['average_reward']:.2f}")
+    print(
+        f"   Full Comms Safety Score:    {eval_full['safety_score']:.3f} | "
+        f"Mean Reward: {eval_full['average_reward']:.2f}"
+    )
+    print(
+        f"   50% Comms Deg Safety Score: {eval_deg['safety_score']:.3f} | "
+        f"Mean Reward: {eval_deg['average_reward']:.2f}"
+    )
 
     print("\n3. Generating Curriculum Learning Curve Figure...")
     fig, ax = plt.subplots(figsize=(8, 5))
 
     episodes = np.arange(1, total_episodes + 1)
     stage1_cutoff = int(total_episodes * 0.6)
-    
+
     # Synthetic smoothed curve illustration
-    rewards_stage1 = -10.0 + 8.0 * (1.0 - np.exp(-episodes[:stage1_cutoff] / 30.0)) + np.random.normal(0, 0.5, stage1_cutoff)
-    rewards_stage2 = rewards_stage1[-1] - 1.5 + 2.0 * (1.0 - np.exp(-episodes[stage1_cutoff:] / 20.0)) + np.random.normal(0, 0.5, total_episodes - stage1_cutoff)
+    rewards_stage1 = (
+        -10.0
+        + 8.0 * (1.0 - np.exp(-episodes[:stage1_cutoff] / 30.0))
+        + np.random.normal(0, 0.5, stage1_cutoff)
+    )
+    rewards_stage2 = (
+        rewards_stage1[-1]
+        - 1.5
+        + 2.0 * (1.0 - np.exp(-episodes[stage1_cutoff:] / 20.0))
+        + np.random.normal(0, 0.5, total_episodes - stage1_cutoff)
+    )
     all_rewards = np.concatenate([rewards_stage1, rewards_stage2])
 
-    ax.plot(episodes, all_rewards, 'b-', alpha=0.4, label="Raw Episode Reward")
+    ax.plot(episodes, all_rewards, "b-", alpha=0.4, label="Raw Episode Reward")
     # Smooth moving average
     kernel = np.ones(10) / 10.0
-    smooth_rewards = np.convolve(all_rewards, kernel, mode='same')
-    ax.plot(episodes, smooth_rewards, 'b-', linewidth=2.5, label="Smoothed MAPPO (Curriculum)")
+    smooth_rewards = np.convolve(all_rewards, kernel, mode="same")
+    ax.plot(episodes, smooth_rewards, "b-", linewidth=2.5, label="Smoothed MAPPO (Curriculum)")
 
-    ax.axvline(stage1_cutoff, color='r', linestyle='--', label=f"Stage Transition (Ep {stage1_cutoff})")
-    ax.set_title("2-Stage Curriculum MAPPO Learning Curve", fontweight='bold')
+    ax.axvline(
+        stage1_cutoff, color="r", linestyle="--", label=f"Stage Transition (Ep {stage1_cutoff})"
+    )
+    ax.set_title("2-Stage Curriculum MAPPO Learning Curve", fontweight="bold")
     ax.set_xlabel("Training Episode")
     ax.set_ylabel("Team Mean Reward")
     ax.grid(True, linestyle="--", alpha=0.5)
@@ -70,6 +88,7 @@ def main():
 
     print(f"\nValidation plots saved to: {out_path}")
     print("=== Phase 5 Validation Completed Successfully! ===")
+
 
 if __name__ == "__main__":
     main()

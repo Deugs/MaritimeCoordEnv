@@ -1,8 +1,7 @@
-# ============================================================================
-# FILE: marlin_twin/training/reward_normalizer.py
-# ============================================================================
+"""Running mean/variance reward normalization."""
 
 import numpy as np
+
 
 class RewardNormalizer:
     """Running mean and standard deviation scaler for rewards."""
@@ -28,12 +27,16 @@ class RunningMeanStd:
         self.count = epsilon
 
     def update(self, x: np.ndarray) -> None:
-        batch_mean = np.mean(x, axis=0)
-        batch_var = np.var(x, axis=0)
-        batch_count = 1 if x.ndim == 0 else x.shape[0]
+        x = np.asarray(x)
+        if x.ndim == 0:
+            batch_mean, batch_var, batch_count = x, np.zeros_like(x), 1
+        else:
+            batch_mean, batch_var, batch_count = np.mean(x, axis=0), np.var(x, axis=0), x.shape[0]
         self.update_from_moments(batch_mean, batch_var, batch_count)
 
-    def update_from_moments(self, batch_mean: np.ndarray, batch_var: np.ndarray, batch_count: int) -> None:
+    def update_from_moments(
+        self, batch_mean: np.ndarray, batch_var: np.ndarray, batch_count: int
+    ) -> None:
         delta = batch_mean - self.mean
         tot_count = self.count + batch_count
         new_mean = self.mean + delta * batch_count / tot_count

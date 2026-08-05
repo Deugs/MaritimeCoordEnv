@@ -1,10 +1,9 @@
-# ============================================================================
-# FILE: marlin_twin/agents/networks.py
-# ============================================================================
+"""GAT encoder and actor-critic neural network architectures."""
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
 
 class GATEncoder(nn.Module):
     """
@@ -12,7 +11,9 @@ class GATEncoder(nn.Module):
     Computes dynamic multi-head attention weights over neighbor vessels.
     """
 
-    def __init__(self, in_features: int = 6, edge_features: int = 4, hidden_dim: int = 64, heads: int = 4):
+    def __init__(
+        self, in_features: int = 6, edge_features: int = 4, hidden_dim: int = 64, heads: int = 4
+    ):
         super().__init__()
         self.hidden_dim = hidden_dim
         self.heads = heads
@@ -35,7 +36,7 @@ class GATEncoder(nn.Module):
         x: torch.Tensor,
         edge_index: torch.Tensor,
         edge_attr: torch.Tensor,
-        return_attention: bool = False
+        return_attention: bool = False,
     ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         # x: [N, in_features], edge_index: [2, E], edge_attr: [E, edge_features]
         N = x.size(0)
@@ -72,7 +73,7 @@ class ActorCriticNet(nn.Module):
             nn.ReLU(),
             nn.Linear(hidden_dim, hidden_dim),
             nn.ReLU(),
-            nn.Linear(hidden_dim, action_dim * 2)  # mean + std log
+            nn.Linear(hidden_dim, action_dim * 2),  # mean + std log
         )
 
         self.critic = nn.Sequential(
@@ -80,7 +81,7 @@ class ActorCriticNet(nn.Module):
             nn.ReLU(),
             nn.Linear(hidden_dim, hidden_dim),
             nn.ReLU(),
-            nn.Linear(hidden_dim, 1)
+            nn.Linear(hidden_dim, 1),
         )
 
     def forward(self, obs: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:

@@ -12,8 +12,7 @@ import matplotlib.pyplot as plt
 from marlin_twin.envs.scenarios import ScenarioGenerator
 from marlin_twin.envs.sensors import SensorSimulator
 from marlin_twin.envs.digital_twin import DigitalTwinEstimator
-from marlin_twin.envs.communication import CommunicationChannelManager
-from marlin_twin.data_classes import MaritimeMessage, MessagePriority
+
 
 def main():
     print("=== MARLIN-Twin Phase 2 Validation Suite ===")
@@ -21,7 +20,6 @@ def main():
     print("\n1. Initializing 5-vessel channel scenario...")
     agents = ScenarioGenerator.create_scenario("channel", n_vessels=5, seed=42)
     estimator = DigitalTwinEstimator()
-    comm = CommunicationChannelManager(bandwidth_bps=9600.0)
 
     actual_states = {vid: agent.current_state for vid, agent in agents.items()}
 
@@ -38,7 +36,9 @@ def main():
         )
 
         # Update Digital Twin
-        digital_twin = estimator.update(f"scene_{int(t)}", t, actual_states, ais_readings, radar_tracks)
+        digital_twin = estimator.update(
+            f"scene_{int(t)}", t, actual_states, ais_readings, radar_tracks
+        )
 
         # Calculate position RMSE across all vessels
         errs = []
@@ -61,10 +61,14 @@ def main():
 
     print("\n3. Generating Digital Twin Validation Figure...")
     fig, ax = plt.subplots(figsize=(8, 5))
-    ax.bar(["EKF (Full AIS)", "JPDA / Dead Reckoning (AIS Outage)"], [avg_ais_err, avg_jpda_err], color=['#2ca02c', '#d62728'])
+    ax.bar(
+        ["EKF (Full AIS)", "JPDA / Dead Reckoning (AIS Outage)"],
+        [avg_ais_err, avg_jpda_err],
+        color=["#2ca02c", "#d62728"],
+    )
     ax.set_ylabel("Position RMSE (meters)")
-    ax.set_title("Digital Twin State Estimation Accuracy Under AIS Loss", fontweight='bold')
-    ax.grid(True, axis='y', linestyle='--', alpha=0.5)
+    ax.set_title("Digital Twin State Estimation Accuracy Under AIS Loss", fontweight="bold")
+    ax.grid(True, axis="y", linestyle="--", alpha=0.5)
 
     os.makedirs("figures", exist_ok=True)
     out_path = os.path.join("figures", "phase2_digital_twin_estimation.png")
@@ -74,6 +78,7 @@ def main():
 
     print(f"\nValidation plots saved to: {out_path}")
     print("=== Phase 2 Validation Completed Successfully! ===")
+
 
 if __name__ == "__main__":
     main()

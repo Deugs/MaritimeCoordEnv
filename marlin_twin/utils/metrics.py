@@ -1,9 +1,7 @@
-# ============================================================================
-# FILE: marlin_twin/utils/metrics.py
-# ============================================================================
+"""Coordination resilience index computation via trapezoidal integration."""
 
 import numpy as np
-from marlin_twin.data_classes import CoordinationResilienceMetrics
+
 
 def compute_resilience_index(degradation_levels: list[float], safety_scores: list[float]) -> float:
     """
@@ -25,6 +23,7 @@ def compute_resilience_index(degradation_levels: list[float], safety_scores: lis
     baseline = max(scores[-1], 1e-6)
     norm_scores = scores / baseline
 
-    area = np.trapz(norm_scores, levels)
+    trapezoid = np.trapezoid if hasattr(np, "trapezoid") else np.trapz
+    area = trapezoid(norm_scores, levels)
     span = levels[-1] - levels[0]
     return float(area / max(span, 1e-6))

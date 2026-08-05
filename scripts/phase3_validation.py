@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Phase 3 Validation Script:
-Runs a 15-vessel port approach scenario simulation and validates multi-agent environment loop & rewards.
+Runs a 15-vessel port approach scenario and validates the multi-agent env loop & rewards.
 Usage:
     python scripts/phase3_validation.py
 """
@@ -12,14 +12,13 @@ import matplotlib.pyplot as plt
 from marlin_twin.data_classes import MaritimeExperimentConfig, VesselAction
 from marlin_twin.envs.maritime_coord_env import MaritimeCoordEnv
 
+
 def main():
     print("=== MARLIN-Twin Phase 3 Validation Suite ===")
 
     print("\n1. Initializing 15-vessel port approach scenario...")
     config = MaritimeExperimentConfig(
-        scenario_type="port_approach",
-        n_vessels=15,
-        episode_length=150
+        scenario_type="port_approach", n_vessels=15, episode_length=150
     )
     env = MaritimeCoordEnv(config)
 
@@ -39,10 +38,7 @@ def main():
 
             # Rule-based simple action
             actions[vid] = VesselAction(
-                vessel_id=vid,
-                propeller_rpm=0.8,
-                rudder_angle=0.0,
-                message_targets=[]
+                vessel_id=vid, propeller_rpm=0.8, rudder_angle=0.0, message_targets=[]
             )
 
         obs, rewards, team_reward, done, step_info = env.step(actions)
@@ -61,17 +57,17 @@ def main():
     for vid, traj in trajectories.items():
         xs = [pt[0] for pt in traj]
         ys = [pt[1] for pt in traj]
-        ax.plot(xs, ys, '-', label=f"Vessel {vid}" if vid < 5 else "")
-        ax.plot(xs[0], ys[0], 'go', markersize=4)
-        ax.plot(xs[-1], ys[-1], 'rs', markersize=4)
+        ax.plot(xs, ys, "-", label=f"Vessel {vid}" if vid < 5 else "")
+        ax.plot(xs[0], ys[0], "go", markersize=4)
+        ax.plot(xs[-1], ys[-1], "rs", markersize=4)
 
-    ax.plot(0, 0, 'k*', markersize=15, label="Port Center Goal")
-    ax.set_title("15-Vessel Port Approach Fleet Trajectories", fontweight='bold')
+    ax.plot(0, 0, "k*", markersize=15, label="Port Center Goal")
+    ax.set_title("15-Vessel Port Approach Fleet Trajectories", fontweight="bold")
     ax.set_xlabel("Easting (m)")
     ax.set_ylabel("Northing (m)")
     ax.grid(True, linestyle="--", alpha=0.5)
-    ax.legend(loc='upper right')
-    ax.axis('equal')
+    ax.legend(loc="upper right")
+    ax.axis("equal")
 
     os.makedirs("figures", exist_ok=True)
     out_path = os.path.join("figures", "phase3_port_approach.png")
@@ -81,6 +77,7 @@ def main():
 
     print(f"\nValidation plots saved to: {out_path}")
     print("=== Phase 3 Validation Completed Successfully! ===")
+
 
 if __name__ == "__main__":
     main()

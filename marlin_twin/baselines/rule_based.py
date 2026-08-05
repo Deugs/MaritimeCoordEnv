@@ -1,10 +1,9 @@
-# ============================================================================
-# FILE: marlin_twin/baselines/rule_based.py
-# ============================================================================
+"""Deterministic rule-based COLREGs collision-avoidance controller."""
 
 import numpy as np
-from marlin_twin.data_classes import VesselObservation, VesselAction, MessagePriority, EncounterType
+from marlin_twin.data_classes import VesselObservation, EncounterType
 from marlin_twin.envs.colregs import COLREGsEngine
+
 
 class RuleBasedCOLREGsController:
     """Deterministic Rule-Based COLREGs Collision Avoidance Controller."""
@@ -27,7 +26,9 @@ class RuleBasedCOLREGsController:
                 most_dangerous_neighbor = nstate
 
         if most_dangerous_neighbor and min_cpa < 2000.0:
-            enc_type, rule = COLREGsEngine.classify_encounter(own_state, most_dangerous_neighbor, min_cpa)
+            enc_type, rule = COLREGsEngine.classify_encounter(
+                own_state, most_dangerous_neighbor, min_cpa
+            )
 
             if enc_type in [EncounterType.HEAD_ON, EncounterType.CROSSING_GIVE_WAY]:
                 rudder = np.pi / 12  # Alter course 15 deg to starboard

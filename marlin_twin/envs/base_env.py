@@ -1,13 +1,14 @@
-# ============================================================================
-# FILE: marlin_twin/envs/base_env.py
-# ============================================================================
+"""Abstract base class for maritime coordination environments."""
 
 from abc import ABC, abstractmethod
-import numpy as np
 from numpy.typing import NDArray
 from marlin_twin.data_classes import (
-    MaritimeExperimentConfig, MaritimeScene, VesselObservation, VesselAction
+    MaritimeExperimentConfig,
+    MaritimeScene,
+    VesselObservation,
+    VesselAction,
 )
+
 
 class BaseMaritimeEnvironment(ABC):
     """Abstract base for maritime coordination environment."""
@@ -25,29 +26,23 @@ class BaseMaritimeEnvironment(ABC):
         self,
         scenario_type: str | None = None,
         n_vessels: int | None = None,
-        seed: int | None = None
+        seed: int | None = None,
     ) -> tuple[dict[int, VesselObservation], dict]:
         """Reset environment to initial maritime scene."""
-        pass
 
     @abstractmethod
-    def step(
-        self,
-        actions: dict[int, VesselAction]
-    ) -> tuple[
+    def step(self, actions: dict[int, VesselAction]) -> tuple[
         dict[int, VesselObservation],
         dict[int, float],
-        float,   # team reward
-        bool,    # done
-        dict     # info
+        float,  # team reward
+        bool,  # done
+        dict,  # info
     ]:
         """Execute one environment step (1 second)."""
-        pass
 
     @abstractmethod
     def get_scene(self) -> MaritimeScene:
         """Return current maritime scene."""
-        pass
 
     def render(self, mode: str = "human") -> NDArray | None:
         """Render current scene."""
@@ -55,17 +50,16 @@ class BaseMaritimeEnvironment(ABC):
 
     def close(self) -> None:
         """Clean up resources."""
-        pass
 
     def set_communication_degradation(
-        self,
-        level: float,
-        jamming_zone: tuple[float, float, float] | None = None
+        self, level: float, jamming_zone: tuple[float, float, float] | None = None
     ) -> None:
         """Set communication degradation level (0.0 = complete loss, 1.0 = full capability)."""
         self.comms_degradation_level = max(0.0, min(1.0, level))
         if self.scene and self.scene.communication_channel:
-            self.scene.communication_channel.weather_degradation = 1.0 - self.comms_degradation_level
+            self.scene.communication_channel.weather_degradation = (
+                1.0 - self.comms_degradation_level
+            )
             if jamming_zone:
                 self.scene.communication_channel.jamming_active = True
                 self.scene.communication_channel.jamming_zone = jamming_zone

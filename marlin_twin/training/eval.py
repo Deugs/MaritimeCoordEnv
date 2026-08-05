@@ -1,10 +1,9 @@
-# ============================================================================
-# FILE: marlin_twin/training/eval.py
-# ============================================================================
+"""Multi-scenario policy evaluation across encounter types and communication levels."""
 
 import numpy as np
 from marlin_twin.api import BaseMaritimeEnvironment, Policy
 from marlin_twin.agents.vessel_agent import VesselAgentWrapper
+
 
 class MultiScenarioEvaluator:
     """Evaluates policies across multi-vessel encounters, channels, and port approach scenarios."""
@@ -15,7 +14,7 @@ class MultiScenarioEvaluator:
         policies: dict[int, Policy],
         scenario_name: str = "channel",
         n_episodes: int = 50,
-        comms_level: float = 1.0
+        comms_level: float = 1.0,
     ) -> dict[str, float]:
         env.set_communication_degradation(comms_level)
         rewards = []
