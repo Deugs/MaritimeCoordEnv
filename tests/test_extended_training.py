@@ -3,6 +3,7 @@
 # ============================================================================
 
 import os
+import pytest
 from marlin_twin.data_classes import MaritimeExperimentConfig
 from marlin_twin.training.mappo import MAPPOTrainer
 
@@ -22,3 +23,11 @@ def test_mappo_save_load_checkpoint(tmp_path):
 
     trainer.load_checkpoint(ckpt_file)
     assert len(trainer.policies) == 2
+
+
+def test_load_checkpoint_missing_file_raises_file_not_found_error(tmp_path):
+    config = MaritimeExperimentConfig(n_vessels=2)
+    trainer = MAPPOTrainer(config)
+
+    with pytest.raises(FileNotFoundError):
+        trainer.load_checkpoint(str(tmp_path / "does_not_exist.pt"))

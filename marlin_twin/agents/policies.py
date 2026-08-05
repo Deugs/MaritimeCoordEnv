@@ -16,10 +16,18 @@ class GATPolicy:
             list(self.net.parameters()) + list(self.encoder.parameters()), lr=lr
         )
 
+    def _preprocess(self, observation: np.ndarray) -> np.ndarray:
+        """Hook for ablation subclasses to transform the raw observation vector
+        before it reaches the network. Identity by default. Both `act` and
+        `get_action_and_val` go through this so every policy variant applies
+        its transform consistently at inference time and during rollout
+        collection for training."""
+        return observation
+
     def act(self, observation: np.ndarray, deterministic: bool = False) -> np.ndarray:
         self.net.eval()
         with torch.no_grad():
-            obs_t = torch.tensor(observation, dtype=torch.float32).unsqueeze(0)
+            obs_t = torch.tensor(self._preprocess(observation), dtype=torch.float32).unsqueeze(0)
             mean, std, _ = self.net(obs_t)
             if deterministic:
                 action = mean
@@ -27,16 +35,24 @@ class GATPolicy:
                 action = torch.normal(mean, std)
             return torch.tanh(action).squeeze(0).numpy()
 
-    def get_action_and_val(self, observation: np.ndarray) -> tuple[np.ndarray, float, float]:
+    def get_action_and_val(
+        self, observation: np.ndarray
+    ) -> tuple[np.ndarray, np.ndarray, float, float]:
+        """Sample one action and return everything derived from that single
+        sample: the tanh-squashed [-1,1] action (for building the executed
+        VesselAction), the raw pre-tanh action (for buffer storage, matching
+        the Normal(mean, std) support that `evaluate_tensors` computes
+        log-probs against), the value estimate, and the log-prob."""
         self.net.eval()
         with torch.no_grad():
-            obs_t = torch.tensor(observation, dtype=torch.float32).unsqueeze(0)
+            obs_t = torch.tensor(self._preprocess(observation), dtype=torch.float32).unsqueeze(0)
             mean, std, value = self.net(obs_t)
             dist = torch.distributions.Normal(mean, std)
-            action = dist.sample()
-            log_prob = dist.log_prob(action).sum(dim=-1).item()
-            act_vec = torch.tanh(action).squeeze(0).numpy()
-            return act_vec, float(value.item()), float(log_prob)
+            raw_action = dist.sample()
+            log_prob = dist.log_prob(raw_action).sum(dim=-1).item()
+            tanh_action = torch.tanh(raw_action).squeeze(0).numpy()
+            raw_vec = raw_action.squeeze(0).numpy()
+            return tanh_action, raw_vec, float(value.item()), float(log_prob)
 
     def evaluate_tensors(
         self, observations: torch.Tensor, actions: torch.Tensor
@@ -72,21 +88,15 @@ class GATPolicy:
 class MeanPoolingPolicy(GATPolicy):
     """Ablation Variant 1: Mean-Pooling GNN Policy without attention weights."""
 
-    def act(self, observation: np.ndarray, deterministic: bool = False) -> np.ndarray:
-        self.net.eval()
-        with torch.no_grad():
-            # Uniform mean-pooling on neighbor features (indices 6..22)
-            obs_mod = observation.copy()
-            if len(obs_mod) >= 22:
-                neighbor_feats = obs_mod[6:22].reshape(-1, 4)
-                mean_feat = np.mean(neighbor_feats, axis=0)
-                obs_mod[6:10] = mean_feat
-                obs_mod[10:22] = 0.0
-
-            obs_t = torch.tensor(obs_mod, dtype=torch.float32).unsqueeze(0)
-            mean, std, _ = self.net(obs_t)
-            action = mean if deterministic else torch.normal(mean, std)
-            return torch.tanh(action).squeeze(0).numpy()
+    def _preprocess(self, observation: np.ndarray) -> np.ndarray:
+        # Uniform mean-pooling on neighbor features (indices 6..22)
+        obs_mod = observation.copy()
+        if len(obs_mod) >= 22:
+            neighbor_feats = obs_mod[6:22].reshape(-1, 4)
+            mean_feat = np.mean(neighbor_feats, axis=0)
+            obs_mod[6:10] = mean_feat
+            obs_mod[10:22] = 0.0
+        return obs_mod
 
     def evaluate_tensors(
         self, observations: torch.Tensor, actions: torch.Tensor
@@ -108,12 +118,3 @@ class MeanPoolingPolicy(GATPolicy):
 
 class MLPPolicy(GATPolicy):
     """Ablation Variant 2: Flat MLP Policy without Graph Neural Networks."""
-
-    def act(self, observation: np.ndarray, deterministic: bool = False) -> np.ndarray:
-        self.net.eval()
-        with torch.no_grad():
-            obs_mod = observation.copy()
-            obs_t = torch.tensor(obs_mod, dtype=torch.float32).unsqueeze(0)
-            mean, std, _ = self.net(obs_t)
-            action = mean if deterministic else torch.normal(mean, std)
-            return torch.tanh(action).squeeze(0).numpy()

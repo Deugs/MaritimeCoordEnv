@@ -142,14 +142,22 @@ class MaritimeCoordEnv(BaseMaritimeEnvironment):
             r_colregs = 1.0
             for e in encounters:
                 if e.vessel_i == vid:
-                    score = COLREGsEngine.evaluate_compliance(
-                        ag.current_state,
-                        actions.get(vid),
-                        new_states[e.vessel_j],
-                        e.encounter_type,
-                        e.tcpa,
-                    )
-                    r_colregs *= score
+                    other_state = new_states[e.vessel_j]
+                    role_type = e.encounter_type
+                elif e.vessel_j == vid:
+                    other_state = new_states[e.vessel_i]
+                    role_type = COLREGsEngine.flip_role(e.encounter_type)
+                else:
+                    continue
+
+                score = COLREGsEngine.evaluate_compliance(
+                    ag.current_state,
+                    actions.get(vid),
+                    other_state,
+                    role_type,
+                    e.tcpa,
+                )
+                r_colregs *= score
 
             # Goal progress reward
             target_wp = ag.current_route.current_waypoint()

@@ -17,7 +17,7 @@ scenario = st.sidebar.selectbox("Scenario Type", ["channel", "open_water", "port
 n_vessels = st.sidebar.slider("Number of Vessels", 2, 25, 5)
 comms_quality = st.sidebar.slider("Communication Quality (lambda)", 0.0, 1.0, 1.0)
 
-col1, col2 = st.subplots(2)
+col1, col2 = st.columns(2)
 
 with col1:
     st.subheader("Scene Overview")

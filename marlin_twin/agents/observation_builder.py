@@ -46,7 +46,7 @@ class ObservationBuilder:
         )
 
     @staticmethod
-    def to_pyg_graph(scene_states: dict, encounters: list = []):
+    def to_pyg_graph(scene_states: dict):
         """Construct PyTorch Geometric Data graph representation."""
         try:
             import torch

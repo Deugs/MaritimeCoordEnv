@@ -85,14 +85,20 @@ class ScenarioGenerator:
                 angle = (sector * (2 * np.pi / 3)) + (np.random.rand() - 0.5) * 0.2
                 start_x = float(dist * np.cos(angle))
                 start_y = float(dist * np.sin(angle))
-                heading = float((angle + np.pi) % (2 * np.pi) - np.pi)
+                # `angle` is a standard math-convention bearing (0 = +X); heading
+                # uses the nautical convention (0 = +Y/North, pi/2 = +X/East), so
+                # pointing back toward the origin requires -angle - pi/2, not
+                # angle + pi (which would be correct only if both used the same
+                # convention).
+                heading = float((-angle - np.pi / 2 + np.pi) % (2 * np.pi) - np.pi)
                 target_x, target_y = 0.0, 0.0  # All heading to port center
             elif scenario_type == "open_water":
                 angle = 2 * np.pi * i / n_vessels
                 radius = 2000.0
                 start_x = float(radius * np.cos(angle))
                 start_y = float(radius * np.sin(angle))
-                heading = float((angle + np.pi) % (2 * np.pi) - np.pi)
+                # Same math-convention-vs-nautical-convention correction as port_approach.
+                heading = float((-angle - np.pi / 2 + np.pi) % (2 * np.pi) - np.pi)
                 target_x, target_y = -start_x, -start_y
             else:  # Channel navigation (traffic lanes)
                 lane = i % 2

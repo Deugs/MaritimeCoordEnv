@@ -18,9 +18,14 @@ class VesselAgentWrapper:
         from marlin_twin.agents.observation_builder import ObservationBuilder
 
         obs_vec = ObservationBuilder.to_vector(observation)
-
         act_arr = self.policy.act(obs_vec, deterministic=deterministic)
+        return self.build_action(observation, act_arr)
 
+    def build_action(self, observation: VesselObservation, act_arr: np.ndarray) -> VesselAction:
+        """Build a VesselAction from an already-computed tanh-squashed [-1,1]
+        action vector (e.g. from `policy.get_action_and_val`) without drawing a
+        new sample — used during training so the action sent to the
+        environment matches the sample whose log-prob/value were recorded."""
         rpm = float(np.clip(act_arr[0] * 0.5 + 0.6, 0.2, 1.0))
         rudder = float(np.clip(act_arr[1] * (np.pi / 6), -np.pi / 6, np.pi / 6))
 

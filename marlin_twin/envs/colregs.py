@@ -96,3 +96,19 @@ class COLREGsEngine:
                     return 1.0  # Proper emergency action
 
         return 1.0
+
+    @staticmethod
+    def flip_role(encounter_type: EncounterType) -> EncounterType:
+        """
+        Map an encounter type classified from vessel_i's perspective to the
+        corresponding type for vessel_j, whose give-way/stand-on role is the
+        opposite of vessel_i's in a crossing/overtaking encounter (head-on
+        responsibility is symmetric, so it is unchanged).
+        """
+        flipped = {
+            EncounterType.CROSSING_GIVE_WAY: EncounterType.CROSSING_STAND_ON,
+            EncounterType.CROSSING_STAND_ON: EncounterType.CROSSING_GIVE_WAY,
+            EncounterType.OVERTAKING: EncounterType.OVERTAKEN,
+            EncounterType.OVERTAKEN: EncounterType.OVERTAKING,
+        }
+        return flipped.get(encounter_type, encounter_type)

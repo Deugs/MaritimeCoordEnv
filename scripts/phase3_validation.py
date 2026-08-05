@@ -7,10 +7,14 @@ Usage:
 """
 
 import os
+from pathlib import Path
+
 import numpy as np
 import matplotlib.pyplot as plt
 from marlin_twin.data_classes import MaritimeExperimentConfig, VesselAction
 from marlin_twin.envs.maritime_coord_env import MaritimeCoordEnv
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 def main():
@@ -69,8 +73,8 @@ def main():
     ax.legend(loc="upper right")
     ax.axis("equal")
 
-    os.makedirs("figures", exist_ok=True)
-    out_path = os.path.join("figures", "phase3_port_approach.png")
+    os.makedirs(os.path.join(REPO_ROOT, "figures"), exist_ok=True)
+    out_path = os.path.join(REPO_ROOT, "figures", "phase3_port_approach.png")
     plt.tight_layout()
     plt.savefig(out_path, dpi=300)
     plt.close()

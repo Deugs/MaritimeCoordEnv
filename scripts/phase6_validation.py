@@ -8,12 +8,16 @@ Usage:
 """
 
 import os
+from pathlib import Path
+
 import numpy as np
 import matplotlib.pyplot as plt
 from marlin_twin.data_classes import MaritimeExperimentConfig
 from marlin_twin.envs.maritime_coord_env import MaritimeCoordEnv
 from marlin_twin.baselines.factory import BaselineFactory
 from marlin_twin.utils.metrics import compute_resilience_index
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 def main():
@@ -132,8 +136,8 @@ def main():
             fontweight="bold",
         )
 
-    os.makedirs("figures", exist_ok=True)
-    out_path = os.path.join("figures", "phase6_benchmark_resilience.png")
+    os.makedirs(os.path.join(REPO_ROOT, "figures"), exist_ok=True)
+    out_path = os.path.join(REPO_ROOT, "figures", "phase6_benchmark_resilience.png")
     plt.tight_layout()
     plt.savefig(out_path, dpi=300)
     plt.close()

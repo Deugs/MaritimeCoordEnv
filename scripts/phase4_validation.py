@@ -8,11 +8,15 @@ Usage:
 """
 
 import os
+from pathlib import Path
+
 import numpy as np
 import matplotlib.pyplot as plt
 from marlin_twin.data_classes import MaritimeExperimentConfig, VesselAction, MessagePriority
 from marlin_twin.envs.maritime_coord_env import MaritimeCoordEnv
 from marlin_twin.agents.policies import GATPolicy
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 def main():
@@ -91,8 +95,8 @@ def main():
     ax2.set_yticklabels(["Reward", "Bandwidth (bps)", "Cap (%)", "Encounters"])
     plt.colorbar(im, ax=ax2)
 
-    os.makedirs("figures", exist_ok=True)
-    out_path = os.path.join("figures", "phase4_degradation_sweep.png")
+    os.makedirs(os.path.join(REPO_ROOT, "figures"), exist_ok=True)
+    out_path = os.path.join(REPO_ROOT, "figures", "phase4_degradation_sweep.png")
     plt.tight_layout()
     plt.savefig(out_path, dpi=300)
     plt.close()

@@ -9,8 +9,8 @@ from abc import ABC, abstractmethod
 from typing import Protocol, runtime_checkable, TYPE_CHECKING
 import json
 import os
-import pickle
 import yaml
+import torch
 from loguru import logger
 from numpy.typing import NDArray
 
@@ -35,6 +35,7 @@ from marlin_twin.data_classes import (
     MaritimeExperimentConfig,
     MaritimeExperimentResult,
     CommunicationStatus,
+    VesselType,
 )
 from marlin_twin.envs.base_env import BaseMaritimeEnvironment
 
@@ -287,13 +288,27 @@ class MarlinTwinAPI:
         """Load configuration from YAML/JSON file."""
         with open(path, "r") as f:
             config_dict = yaml.safe_load(f)
+        if "boundaries" in config_dict:
+            config_dict["boundaries"] = tuple(config_dict["boundaries"])
+        if "vessel_types" in config_dict:
+            config_dict["vessel_types"] = [VesselType[name] for name in config_dict["vessel_types"]]
         self.config = MaritimeExperimentConfig(**config_dict)
         return self
 
     def save_config(self, path: str) -> None:
-        """Save current configuration to file."""
+        """Save current configuration to file.
+
+        Uses `yaml.safe_dump` (matching `load_config`'s `yaml.safe_load`) so the
+        round-trip actually works — `MaritimeExperimentConfig`'s `boundaries`
+        (a tuple) and `vessel_types` (a list of `VesselType` enums) aren't
+        representable by the safe dumper as-is, so they're converted to a
+        plain list and enum names first and converted back on load.
+        """
+        config_dict = dict(self.config.__dict__)
+        config_dict["boundaries"] = list(config_dict["boundaries"])
+        config_dict["vessel_types"] = [vt.name for vt in config_dict["vessel_types"]]
         with open(path, "w") as f:
-            yaml.dump(self.config.__dict__, f)
+            yaml.safe_dump(config_dict, f)
 
     def create_environment(
         self, env_class: type[BaseMaritimeEnvironment] | None = None
@@ -450,8 +465,7 @@ class MarlinTwinAPI:
 
         for vid, policy in self.policies.items():
             policy_state = policy.get_state()
-            with open(os.path.join(output_dir, f"policy_vessel_{vid}.pkl"), "wb") as f:
-                pickle.dump(policy_state, f)
+            torch.save(policy_state, os.path.join(output_dir, f"policy_vessel_{vid}.pt"))
 
         summary = self.get_summary()
         with open(os.path.join(output_dir, "summary.json"), "w") as f:

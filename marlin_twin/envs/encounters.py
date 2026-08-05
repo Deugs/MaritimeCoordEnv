@@ -28,13 +28,13 @@ class EncounterManager:
         tcpa = float(-np.dot(r, v) / v_sq)
         if tcpa < 0.0:
             dist = float(np.linalg.norm(r))
-            return dist, 0.0, dist
+            return 0.0, dist, dist
 
         cpa_pos_i = state_i.position() + state_i.velocity_vector() * tcpa
         cpa_pos_j = state_j.position() + state_j.velocity_vector() * tcpa
         dcpa = float(np.linalg.norm(cpa_pos_j - cpa_pos_i))
 
-        return dcpa, tcpa, dcpa
+        return tcpa, dcpa, dcpa
 
     @classmethod
     def detect_encounters(cls, states: dict[int, VesselState]) -> list[Encounter]:
@@ -44,7 +44,7 @@ class EncounterManager:
         for i in range(len(v_ids)):
             for j in range(i + 1, len(v_ids)):
                 st_i, st_j = states[v_ids[i]], states[v_ids[j]]
-                cpa_dist, tcpa, dcpa = cls.compute_cpa(st_i, st_j)
+                tcpa, dcpa, cpa_dist = cls.compute_cpa(st_i, st_j)
 
                 enc_type, rule = COLREGsEngine.classify_encounter(st_i, st_j, cpa_dist)
                 if enc_type != EncounterType.NO_ENCOUNTER:

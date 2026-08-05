@@ -3,8 +3,30 @@
 from dataclasses import dataclass, field
 from typing import List, Dict, Tuple, Optional, Callable
 from enum import Enum, auto
+import pickle
 import numpy as np
 from numpy.typing import NDArray
+
+
+class _RestrictedUnpickler(pickle.Unpickler):
+    """Unpickler used by `MaritimeExperimentResult.load` that only allows
+    classes from this package and numpy, plus a short allowlist of inert
+    builtin container types. Pickle can execute arbitrary code during
+    deserialization (e.g. via a `__reduce__` referencing `builtins.eval`);
+    this narrows (but does not eliminate) that risk by rejecting everything
+    not explicitly allowed here — only load result files from a source you
+    trust."""
+
+    _SAFE_MODULE_PREFIXES = ("marlin_twin", "numpy")
+    _SAFE_BUILTINS = {"complex", "bytearray", "frozenset", "set", "range", "slice"}
+
+    def find_class(self, module: str, name: str):
+        if module == "builtins" and name in self._SAFE_BUILTINS:
+            return super().find_class(module, name)
+        if not module.startswith(self._SAFE_MODULE_PREFIXES):
+            raise pickle.UnpicklingError(f"Refusing to unpickle unsafe class {module}.{name}")
+        return super().find_class(module, name)
+
 
 # =============================================================================
 # ENUMERATIONS
@@ -151,8 +173,8 @@ class VesselDynamics:
 
     def compute_derivatives(
         self, state: VesselState, propeller_rpm: float, rudder_angle: float
-    ) -> Tuple[float, float, float, float, float]:
-        """Compute state derivatives (dx, dy, dheading, du, dr)."""
+    ) -> Tuple[float, float, float, float, float, float]:
+        """Compute state derivatives (dx, dy, dheading, du, dv, dr)."""
         u = state.surge_velocity
         v = state.sway_velocity
         r = state.yaw_rate
@@ -164,9 +186,9 @@ class VesselDynamics:
         drag = self.X_u * u * abs(u)
         du = (thrust + drag) / effective_mass
 
-        # Sway equation
+        # Sway equation (MMG added mass)
         Y = self.Y_v_dot * v + self.Y_v * v * abs(v) + rudder_angle * self.rudder_area * u * u * 0.5
-        Y / max(self.mass, 1.0)
+        dv = Y / max(self.mass - self.Y_v_dot, 1.0)
 
         # Yaw equation
         N = self.N_r_dot * r + self.N_r * r * abs(r) + rudder_angle * self.rudder_area * u * u * 0.3
@@ -177,7 +199,7 @@ class VesselDynamics:
         dy = u * np.cos(state.heading) - v * np.sin(state.heading)
         dheading = r
 
-        return dx, dy, dheading, du, dr
+        return dx, dy, dheading, du, dv, dr
 
 
 @dataclass(frozen=True)
@@ -380,9 +402,12 @@ class MaritimeCommunicationChannel:
         return message.size_bits <= self.available_bandwidth(time_window)
 
     def _in_jamming_zone(self, message: MaritimeMessage) -> bool:
-        if self.jamming_zone is None:
+        if self.jamming_zone is None or message.content is None or len(message.content) < 2:
             return False
-        return False
+        zone_x, zone_y, zone_radius = self.jamming_zone
+        msg_x, msg_y = float(message.content[0]), float(message.content[1])
+        dist = ((msg_x - zone_x) ** 2 + (msg_y - zone_y) ** 2) ** 0.5
+        return dist <= zone_radius
 
     def get_link_status(self, vessel_i: int, vessel_j: int) -> CommunicationStatus:
         return self.active_links.get((vessel_i, vessel_j), CommunicationStatus.ACTIVE)
@@ -823,17 +848,15 @@ class MaritimeExperimentResult:
     baseline_comparison: Dict[str, Dict[str, float]] = field(default_factory=dict)
 
     def save(self, path: str) -> None:
-        import pickle
-
         with open(path, "wb") as f:
             pickle.dump(self, f)
 
     @classmethod
     def load(cls, path: str) -> "MaritimeExperimentResult":
-        import pickle
-
+        """Only load result files from a source you trust — see
+        `_RestrictedUnpickler` for the (partial) mitigation applied here."""
         with open(path, "rb") as f:
-            return pickle.load(f)
+            return _RestrictedUnpickler(f).load()
 
     def get_summary(self) -> Dict[str, float]:
         return {

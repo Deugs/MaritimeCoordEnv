@@ -48,9 +48,10 @@ def test_cpa_tcpa_computation():
     v1 = VesselState(vessel_id=0, x=0.0, y=0.0, heading=0.0, speed=10.0)  # Heading North
     v2 = VesselState(vessel_id=1, x=0.0, y=2000.0, heading=np.pi, speed=10.0)  # Heading South
 
-    cpa, tcpa, dcpa = EncounterManager.compute_cpa(v1, v2)
-    assert cpa == pytest.approx(0.0, abs=1e-3)
+    tcpa, dcpa, cpa_distance = EncounterManager.compute_cpa(v1, v2)
     assert tcpa == pytest.approx(100.0, abs=1.0)  # 2000m / (10 + 10) m/s = 100s
+    assert dcpa == pytest.approx(0.0, abs=1e-3)
+    assert cpa_distance == pytest.approx(0.0, abs=1e-3)
 
 
 def test_preset_scenarios_creation():

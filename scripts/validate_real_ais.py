@@ -8,11 +8,15 @@ Usage:
 """
 
 import os
+from pathlib import Path
+
 import numpy as np
 import matplotlib.pyplot as plt
 from marlin_twin.data.ais_loader import AISDataLoader
 from marlin_twin.envs.digital_twin import DigitalTwinEstimator
 from marlin_twin.data_classes import DigitalTwinConfig
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 def main():
@@ -107,8 +111,8 @@ def main():
     ax2.grid(True, linestyle="--", alpha=0.5)
     ax2.legend()
 
-    os.makedirs("figures", exist_ok=True)
-    out_path = os.path.join("figures", "real_ais_digital_twin_validation.png")
+    os.makedirs(os.path.join(REPO_ROOT, "figures"), exist_ok=True)
+    out_path = os.path.join(REPO_ROOT, "figures", "real_ais_digital_twin_validation.png")
     plt.tight_layout()
     plt.savefig(out_path, dpi=300)
     plt.close()

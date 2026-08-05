@@ -16,8 +16,9 @@ def test_running_mean_std_accumulates_across_updates():
     rms.update(np.array([1.0, 1.0, 1.0]))
     rms.update(np.array([5.0, 5.0, 5.0]))
 
-    assert rms.count > 6.0
-    assert 1.0 < rms.mean < 5.0
+    assert rms.count == pytest.approx(6.0, abs=0.001)
+    # Two equal-size batches of all-1.0s and all-5.0s must average to exactly 3.0.
+    assert rms.mean == pytest.approx(3.0, abs=0.01)
 
 
 def test_reward_normalizer_returns_finite_scaled_reward():
