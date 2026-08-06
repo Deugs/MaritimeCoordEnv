@@ -69,6 +69,7 @@ Digital Twin technology links physical assets with digital representations \cite
 
 \section{3-DOF Hydrodynamic Vessel Model \& Problem Formulation}
 \subsection{3-DOF MMG Vessel Dynamics}
+\label{sec:mmg-dynamics}
 The 3-DOF horizontal manoeuvring motion of an ASV (surge $u$, sway $v$, yaw rate $r$) is governed by the MMG equations \cite{yoshimura2009mmg, fossen2011handbook}:
 \begin{equation}
 (m + m_x) \dot{u} - (m + m_y) v r = X_{\text{hydro}} + X_{\text{prop}} + X_{\text{rud}}
@@ -88,7 +89,7 @@ where $m$ is vessel displacement, $m_x, m_y, J_z$ are added masses/moment of ine
 \label{fig:sea_trials}
 \end{figure}
 
-As shown in Fig. \ref{fig:sea_trials}, the model successfully satisfies IMO standards with a tactical diameter of 3.2$L$ and 1st overshoot angle of 8.4$^\circ$.
+As shown in Fig. \ref{fig:sea_trials}, the model reaches a 1st overshoot angle of 7.1$^\circ$ on the 10$^\circ$/10$^\circ$ zig-zag maneuver, within the IMO MSC.137(76) limit (25$^\circ$ for this rudder angle). The 35$^\circ$ turning circle, however, yields a tactical diameter of approximately 19.2 km -- far outside the IMO standard's 5$L$ ceiling -- reflecting that this model's hydrodynamic damping/added-mass coefficients are hand-tuned estimates rather than derived from captive-model-test data (see Section~\ref{sec:limitations}), not a validated result.
 
 \subsection{POMDP Game Formulation}
 The multi-ASV interaction is formulated as a Partially Observable Markov Decision Process (POMDP) defined by $\langle \mathcal{N}, \mathcal{S}, \{\mathcal{A}_i\}, \{\mathcal{O}_i\}, \mathcal{P}, \mathcal{R}, \gamma \rangle$, where $\mathcal{N} = \{1, \dots, N\}$ is the set of $N=4$ vessels.
@@ -186,12 +187,12 @@ Table \ref{tab:hyperparams} details the vessel parameters and MAPPO hyperparamet
 
 \section{Experimental Evaluation}
 \subsection{Training Performance \& Convergence}
-We train MARLIN-Twin across 5 independent random seeds. Fig. \ref{fig:extended_training} shows policy convergence with 95\% confidence interval error bands, demonstrating rapid adaptation during Stage 2 curriculum transition at episode 300.
+We train MARLIN-Twin across 5 independent random seeds. Fig. \ref{fig:extended_training} shows policy convergence with $\pm 1$ standard deviation error bands, showing measurable improvement during Stage 1 pre-training and continued adaptation through the Stage 2 curriculum transition at episode 300.
 
 \begin{figure}[t]
 \centering
 \includegraphics[width=0.48\textwidth]{fig10_extended_training_5k_seeds_ieee.pdf}
-\caption{5-Seed Extended Curriculum MAPPO Training Curves with 95\% Confidence Interval Error Bands.}
+\caption{5-Seed Extended Curriculum MAPPO Training Curves with $\pm 1$ Standard Deviation Error Bands.}
 \label{fig:extended_training}
 \end{figure}
 
@@ -204,19 +205,19 @@ R_{\text{resilience}} = \frac{\int_{0}^{1} J(\lambda) \, d\lambda}{J(1.0)}
 \begin{figure}[t]
 \centering
 \includegraphics[width=0.48\textwidth]{fig9_benchmark_resilience_ieee.pdf}
-\caption{Baseline Algorithm Coordination Resilience Comparison. MARLIN-Twin maintains $R_{\text{resilience}} = 1.0000$ across all bandwidth degradation levels ($\lambda$).}
+\caption{Baseline Algorithm Coordination Resilience Comparison across MARLIN-Twin, Independent PPO, MADDPG, and Rule-Based COLREGs.}
 \label{fig:resilience_benchmark}
 \end{figure}
 
-As shown in Fig. \ref{fig:resilience_benchmark}, MARLIN-Twin achieves a perfect resilience index of $1.0000$, whereas IPPO ($0.820$) and Rule-Based methods ($0.650$) experience severe degradation under lossy channels.
+As shown in Fig. \ref{fig:resilience_benchmark}, all four benchmarked algorithms -- MARLIN-Twin, Independent PPO, MADDPG, and Rule-Based COLREGs -- achieve an identical resilience index of $1.0000$ in this 2-vessel head-on evaluation scenario. We do not read this as genuine equivalent resilience; see the Limitations discussion in Section~\ref{sec:limitations} for why this uniform result likely reflects the safety-score metric saturating at its ceiling in this scenario rather than a meaningful comparison.
 
-\subsection{Real-World AIS Trajectory Validation}
-We evaluate the EKF/JPDA Digital Twin using real-world vessel trajectories from NOAA AIS datasets \cite{chen2024digitaltwin, huang2025ais}. Fig. \ref{fig:real_ais} illustrates tracking performance during a 300s AIS blackout. The EKF Digital Twin maintains a position RMSE of 543.62m, compared to 1069.44m for unfiltered Dead Reckoning.
+\subsection{Simulated AIS Trajectory Validation}
+We evaluate the EKF/JPDA Digital Twin using a simulated, representative AIS-like trajectory with an injected 300s signal blackout \cite{chen2024digitaltwin, huang2025ais} -- this repository has no real-world AIS dataset, so we do not claim NOAA or other real-world provenance for this trajectory. Fig. \ref{fig:real_ais} illustrates tracking performance during the blackout. The EKF Digital Twin maintains an overall position RMSE of approximately 1778m, rising to approximately 3498m during the blackout window itself.
 
 \begin{figure}[t]
 \centering
 \includegraphics[width=0.48\textwidth]{fig11_real_ais_validation_ieee.pdf}
-\caption{Real-World AIS Trajectory Validation during a 300s AIS Blackout Period (543.62m EKF RMSE vs 1069.44m Blackout DR RMSE).}
+\caption{Simulated AIS Trajectory Validation during a 300s Blackout Period ($\sim$1778m overall EKF RMSE vs $\sim$3498m during the blackout window).}
 \label{fig:real_ais}
 \end{figure}
 
@@ -230,13 +231,13 @@ We evaluate the EKF/JPDA Digital Twin using real-world vessel trajectories from 
 \subsection{4-Variant Model Ablation Study}
 To evaluate the contribution of each system component, we conduct a 4-variant ablation study (Fig. \ref{fig:ablation_study}):
 \begin{enumerate}
-    \item \textbf{MARLIN-Twin (Full Proposed)}: GAT + EKF Digital Twin ($R_{\text{resilience}} = 1.0000$).
-    \item \textbf{Ablation 1 (Mean-Pooling GNN)}: Replaces GAT attention with uniform mean pooling ($R_{\text{resilience}} = 1.0000$).
-    \item \textbf{Ablation 2 (Flat MLP Policy)}: Replaces GNN graph encoding with flat vector MLP ($R_{\text{resilience}} = 0.9000$).
-    \item \textbf{Ablation 3 (No Digital Twin)}: Uses raw noisy AIS without EKF filtering ($R_{\text{resilience}} = 0.8000$).
+    \item \textbf{MARLIN-Twin (Full Proposed)}: GAT + EKF Digital Twin.
+    \item \textbf{Ablation 1 (Mean-Pooling GNN)}: Replaces GAT attention with uniform mean pooling.
+    \item \textbf{Ablation 2 (Flat MLP Policy)}: Replaces GNN graph encoding with flat vector MLP.
+    \item \textbf{Ablation 3 (No Digital Twin)}: Uses raw noisy AIS without EKF filtering.
 \end{enumerate}
 
-Table \ref{tab:ablation_table} summarizes the quantitative metrics across all variants.
+Table \ref{tab:ablation_table} summarizes the quantitative metrics across all variants. As with the baseline comparison above, all four variants score identically ($J(1.0) = J(0.0) = 1.0000$, $R_{\text{resilience}} = 1.0000$) in this evaluation scenario -- see Section~\ref{sec:limitations}.
 
 \begin{table}[h]
 \caption{Quantitative Performance Metrics of Ablation Variants}
@@ -246,16 +247,26 @@ Table \ref{tab:ablation_table} summarizes the quantitative metrics across all va
 \toprule
 \textbf{Variant Model} & \textbf{Safety $J(1.0)$} & \textbf{Safety $J(0.0)$} & \textbf{$R_{\text{resilience}}$} \\
 \midrule
-\textbf{MARLIN-Twin (Full)} & \textbf{0.984} & \textbf{0.984} & \textbf{1.0000} \\
-Ablation 1 (Mean-Pool) & 0.985 & 0.985 & 1.0000 \\
-Ablation 2 (Flat MLP) & 0.985 & 0.788 & 0.9000 \\
-Ablation 3 (No Twin) & 0.985 & 0.591 & 0.8000 \\
+\textbf{MARLIN-Twin (Full)} & \textbf{1.000} & \textbf{1.000} & \textbf{1.0000} \\
+Ablation 1 (Mean-Pool) & 1.000 & 1.000 & 1.0000 \\
+Ablation 2 (Flat MLP) & 1.000 & 1.000 & 1.0000 \\
+Ablation 3 (No Twin) & 1.000 & 1.000 & 1.0000 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
+\subsection{Limitations}
+\label{sec:limitations}
+Several results in this paper reflect current implementation limitations rather than validated claims, and should be read accordingly:
+
+\begin{itemize}
+    \item \textbf{Hydrodynamic coefficient realism.} The MMG added-mass/damping coefficients used throughout (Section~\ref{sec:mmg-dynamics}) are hand-tuned engineering estimates, not derived from captive-model-test data or a documented regression method such as Clarke, Gedling, and Hine's (1983) hull-form-based estimation approach. This is directly visible in Fig.~\ref{fig:sea_trials}: the 35$^\circ$ turning circle's tactical diameter ($\sim$19.2 km) is roughly 25$\times$ the IMO MSC.137(76) ceiling of $5L$, indicating the model's yaw response is far more sluggish than a real vessel of this size.
+    \item \textbf{Resilience/safety-score metric saturation.} Every algorithm and every ablation variant we evaluated scores an identical $R_{\text{resilience}} = 1.0000$ (Figs.~\ref{fig:resilience_benchmark}, \ref{fig:ablation_study}) with zero variance across all six communication-degradation levels tested. This uniformity is far more consistent with the CPA-distance-based safety score saturating at its ceiling in this particular 2-vessel head-on scenario (i.e. vessels never close enough for the metric to register a difference) than with every method -- including an untrained rule-based controller -- achieving genuinely perfect resilience. We could not, in the scope of this work, confirm whether communication degradation is reaching the evaluated policies' observations at all in this scenario: an independent bandwidth-vs-reward sweep (Fig.~\ref{fig:bandwidth_heatmap}) produced a bit-identical mean team reward across every degradation level from full communication to total blackout. A scenario with tighter vessel spacing and/or a metric with more dynamic range is needed before resilience claims here can be taken as validated.
+    \item \textbf{Simulated, not real-world, AIS data.} No NOAA or other real-world AIS dataset is used anywhere in this codebase; the AIS trajectory validation in Fig.~\ref{fig:real_ais} is a simulated, representative trajectory, not measured telemetry.
+\end{itemize}
+
 \section{Conclusion \& Future Work}
-This paper presented MARLIN-Twin, a resilient multi-agent reinforcement learning framework for autonomous vessel collision avoidance under communication outages. By coupling an EKF/JPDA Digital Twin with a Multi-Head Graph Attention Network and CTDE MAPPO optimization, MARLIN-Twin achieves a perfect Coordination Resilience Index ($R_{\text{resilience}} = 1.0000$) across extreme bandwidth degradation. Real-world AIS trajectory validation demonstrates superior state tracking accuracy (543.62m RMSE). Future work will focus on integrating 3D wave disturbances and conducting physical ASV field trials.
+This paper presented MARLIN-Twin, a resilient multi-agent reinforcement learning framework for autonomous vessel collision avoidance under communication outages. By coupling an EKF/JPDA Digital Twin with a Multi-Head Graph Attention Network and CTDE MAPPO optimization, MARLIN-Twin achieves a Coordination Resilience Index of $1.0000$ in our evaluation scenario, though Section~\ref{sec:limitations} discusses why this specific result should not yet be read as evidence of genuine superior resilience. Simulated AIS trajectory validation demonstrates the EKF/JPDA Digital Twin's dead-reckoning fallback functions correctly during a blackout, with position error growing to roughly 3498m during the outage window. Future work will focus on a more discriminative multi-vessel evaluation scenario, grounding the MMG hydrodynamic coefficients in captive-model-test data, integrating 3D wave disturbances, and conducting physical ASV field trials.
 
 \bibliographystyle{IEEEtran}
 \bibliography{references}
