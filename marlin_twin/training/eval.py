@@ -4,6 +4,7 @@ import numpy as np
 from marlin_twin.api import BaseMaritimeEnvironment, Policy
 from marlin_twin.agents.vessel_agent import VesselAgentWrapper
 from marlin_twin.training.mappo import _build_scene_graph
+from marlin_twin.utils.scoring import compute_safety_score
 
 
 class MultiScenarioEvaluator:
@@ -54,5 +55,5 @@ class MultiScenarioEvaluator:
             "mean_reward": float(np.mean(rewards)),
             "std_reward": float(np.std(rewards)),
             "mean_cpa": avg_cpa,
-            "safety_score": float(np.clip(avg_cpa / 1000.0, 0.0, 1.0)),
+            "safety_score": compute_safety_score(cpas),
         }

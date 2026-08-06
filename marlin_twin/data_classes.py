@@ -413,6 +413,24 @@ class MaritimeCommunicationChannel:
         return self.active_links.get((vessel_i, vessel_j), CommunicationStatus.ACTIVE)
 
 
+@dataclass(frozen=True)
+class CommsScheduleEvent:
+    """A timed override on top of the environment's static communication
+    degradation level — e.g. "jam this zone from t=100 to t=150" within an
+    otherwise-normal episode. `BaseMaritimeEnvironment._apply_comms_schedule`
+    applies whichever event is `active_at` the current timestep via the
+    existing `set_communication_degradation`, falling back to the level that
+    was configured before the schedule took over when no event matches."""
+
+    t_start: float
+    t_end: float
+    degradation_level: float
+    jamming_zone: Optional[Tuple[float, float, float]] = None
+
+    def active_at(self, t: float) -> bool:
+        return self.t_start <= t < self.t_end
+
+
 @dataclass
 class VesselAgent:
     """Autonomous vessel agent."""
@@ -779,6 +797,7 @@ class MaritimeExperimentConfig:
     n_vessels: int = 10
     scenario_type: str = "channel"
     boundaries: Tuple[float, float, float, float] = (-5000, 5000, -5000, 5000)
+    environment_condition: EnvironmentCondition = EnvironmentCondition.CLEAR
 
     # Vessels
     vessel_types: List[VesselType] = field(
@@ -801,6 +820,7 @@ class MaritimeExperimentConfig:
     packet_loss_base: float = 0.05
     adaptive_bandwidth: bool = True
     priority_queue: bool = True
+    comms_schedule: List[CommsScheduleEvent] = field(default_factory=list)
 
     # Digital Twin
     dt_enabled: bool = True

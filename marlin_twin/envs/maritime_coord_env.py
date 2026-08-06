@@ -18,6 +18,20 @@ from marlin_twin.envs.digital_twin import DigitalTwinEstimator
 from marlin_twin.envs.communication import CommunicationChannelManager
 from marlin_twin.envs.sensors import SensorSimulator
 
+# Baseline sensing/comm range under CLEAR conditions is 5000.0m (see
+# `EncounterManager.build_encounter_graph`'s default `max_range`) — every
+# other condition's visibility is expressed as a fraction of that baseline,
+# which is what actually shrinks detection range and grows sensor noise
+# below (not just a label on the observation, as it was before).
+VISIBILITY_BY_CONDITION: dict[EnvironmentCondition, float] = {
+    EnvironmentCondition.CLEAR: 5000.0,
+    EnvironmentCondition.FOG: 800.0,
+    EnvironmentCondition.RAIN: 3000.0,
+    EnvironmentCondition.HIGH_WIND: 4000.0,
+    EnvironmentCondition.HIGH_SEA: 3500.0,
+    EnvironmentCondition.ICE: 4500.0,
+}
+
 
 class MaritimeCoordEnv(BaseMaritimeEnvironment):
     """
@@ -31,6 +45,8 @@ class MaritimeCoordEnv(BaseMaritimeEnvironment):
         self.solvers: dict[int, MMGDynamicsSolver] = {}
         self.dt_estimator = DigitalTwinEstimator()
         self.comm_manager = CommunicationChannelManager(config.bandwidth_bps, config.base_latency)
+        self._visibility_range = VISIBILITY_BY_CONDITION[EnvironmentCondition.CLEAR]
+        self.set_communication_schedule(config.comms_schedule)
 
     def reset(
         self,
@@ -42,11 +58,18 @@ class MaritimeCoordEnv(BaseMaritimeEnvironment):
         nv = n_vessels or self.config.n_vessels
 
         self.time_step = 0
-        agents = ScenarioGenerator.create_scenario(st, nv, seed)
+        self._visibility_range = VISIBILITY_BY_CONDITION[self.config.environment_condition]
+        vessel_types = self.config.vessel_types if self.config.heterogeneous else None
+        agents = ScenarioGenerator.create_scenario(st, nv, seed, vessel_types=vessel_types)
         self.solvers = {vid: MMGDynamicsSolver(ag.dynamics) for vid, ag in agents.items()}
 
         states = {vid: ag.current_state for vid, ag in agents.items() if ag.current_state}
-        encounters = EncounterManager.detect_encounters(states)
+        visibility_factor = (
+            self._visibility_range / VISIBILITY_BY_CONDITION[EnvironmentCondition.CLEAR]
+        )
+        encounters = EncounterManager.detect_encounters(
+            states, max_range=5556.0 * visibility_factor, max_cpa=1852.0 * visibility_factor
+        )
 
         dt_scene = self.dt_estimator.update("init_scene", 0.0, states, [], [])
 
@@ -57,8 +80,16 @@ class MaritimeCoordEnv(BaseMaritimeEnvironment):
             communication_channel=self.comm_manager.channel,
             digital_twin=dt_scene,
             boundaries=self.config.boundaries,
-            environment_condition=EnvironmentCondition.CLEAR,
+            environment_condition=self.config.environment_condition,
         )
+
+        if self._comms_schedule:
+            # Snapshot whatever degradation/jamming was configured before
+            # reset (e.g. a sweep script's `env.set_communication_degradation(lam)`)
+            # as the fallback the schedule reverts to outside its windows.
+            self._comms_baseline_level = self.comms_degradation_level
+            self._comms_baseline_jamming_zone = self.scene.communication_channel.jamming_zone
+            self._apply_comms_schedule(0.0)
 
         obs = self._build_observations()
         return obs, {"encounters": len(encounters)}
@@ -68,6 +99,7 @@ class MaritimeCoordEnv(BaseMaritimeEnvironment):
     ) -> tuple[dict[int, VesselObservation], dict[int, float], float, bool, dict]:
         self.time_step += 1
         dt = 1.0
+        self._apply_comms_schedule(float(self.time_step))
 
         # Step 1: Update Dynamics
         new_states = {}
@@ -85,13 +117,19 @@ class MaritimeCoordEnv(BaseMaritimeEnvironment):
 
         # Step 2: Sensors & Digital Twin Update
         drop_prob = float(np.clip(1.0 - self.comms_degradation_level, 0.0, 0.98))
+        visibility_factor = (
+            self._visibility_range / VISIBILITY_BY_CONDITION[EnvironmentCondition.CLEAR]
+        )
+        noise_scale = 1.0 / max(visibility_factor, 1e-6)
         ais_readings = [
-            SensorSimulator.generate_ais(s, float(self.time_step), drop_prob=drop_prob)
+            SensorSimulator.generate_ais(
+                s, float(self.time_step), drop_prob=drop_prob, noise_scale=noise_scale
+            )
             for s in new_states.values()
         ]
         ais_readings = [r for r in ais_readings if r is not None]
         radar_tracks = [
-            SensorSimulator.generate_radar(s, float(self.time_step), idx)
+            SensorSimulator.generate_radar(s, float(self.time_step), idx, noise_scale=noise_scale)
             for idx, s in enumerate(new_states.values())
         ]
 
@@ -100,8 +138,12 @@ class MaritimeCoordEnv(BaseMaritimeEnvironment):
         )
         self.scene.digital_twin = dt_scene
 
-        # Step 3: Encounters & COLREGs Compliance
-        encounters = EncounterManager.detect_encounters(new_states)
+        # Step 3: Encounters & COLREGs Compliance — range/CPA gates shrink
+        # under degraded visibility so restricted visibility genuinely
+        # reduces/delays what counts as an "encounter," not just a label.
+        encounters = EncounterManager.detect_encounters(
+            new_states, max_range=5556.0 * visibility_factor, max_cpa=1852.0 * visibility_factor
+        )
 
         # Step 4: Process Communication Messages
         outgoing = []
@@ -130,6 +172,7 @@ class MaritimeCoordEnv(BaseMaritimeEnvironment):
 
         # Step 5: Compute Rewards
         rewards = {}
+        colregs_violations = 0
         for vid, ag in self.scene.vessels.items():
             # Safety reward (CPA penalty)
             min_cpa = min(
@@ -158,6 +201,8 @@ class MaritimeCoordEnv(BaseMaritimeEnvironment):
                     e.tcpa,
                 )
                 r_colregs *= score
+                if score < 0.5:
+                    colregs_violations += 1
 
             # Goal progress reward
             target_wp = ag.current_route.current_waypoint()
@@ -182,6 +227,7 @@ class MaritimeCoordEnv(BaseMaritimeEnvironment):
         info = {
             "encounters": len(encounters),
             "min_cpa": min([e.cpa_distance for e in encounters], default=5000.0),
+            "colregs_violations": colregs_violations,
         }
 
         return obs, rewards, team_reward, done, info
@@ -218,8 +264,8 @@ class MaritimeCoordEnv(BaseMaritimeEnvironment):
                 own_route=ag.current_route,
                 neighbor_states=neighbors,
                 neighbor_intents=intents,
-                environment=EnvironmentCondition.CLEAR,
-                visibility_range=5000.0,
+                environment=self.scene.environment_condition,
+                visibility_range=self._visibility_range,
                 wind_speed=5.0,
                 wind_direction=0.0,
                 current_speed=0.5,

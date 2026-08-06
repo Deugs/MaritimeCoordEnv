@@ -11,7 +11,7 @@ from marlin_twin.data_classes import MaritimeExperimentConfig
 from marlin_twin.api import BaseTrainer, BaseMaritimeEnvironment, Policy
 from marlin_twin.baselines.maddpg import MADDPGPolicy
 from marlin_twin.agents.vessel_agent import VesselAgentWrapper
-from marlin_twin.training.mappo import _build_scene_graph
+from marlin_twin.training.mappo import _build_scene_graph, _evaluate_policies
 from marlin_twin.training.replay_buffer import ReplayBuffer
 
 MIN_REPLAY_SIZE = 256
@@ -206,42 +206,7 @@ class MADDPGTrainer(BaseTrainer):
         n_episodes: int = 100,
         communication_degradation: float = 1.0,
     ) -> dict[str, float]:
-        env.set_communication_degradation(communication_degradation)
-        total_rewards = []
-        cpa_list = []
-
-        for ep in range(n_episodes):
-            obs, info = env.reset(seed=1000 + ep)
-            done = False
-            ep_rew = 0.0
-
-            while not done:
-                graph, node_idx_map = _build_scene_graph(env, obs.keys(), float(env.time_step))
-                actions = {}
-                for vid, agent_obs in obs.items():
-                    pol = policies[vid]
-                    wrapper = VesselAgentWrapper(env.get_scene().vessels[vid], pol)
-                    actions[vid] = wrapper.select_action(
-                        agent_obs, graph, node_idx_map.get(vid), deterministic=True
-                    )
-
-                obs, rewards, team_reward, done, info = env.step(actions)
-                ep_rew += team_reward
-                if "min_cpa" in info:
-                    cpa_list.append(info["min_cpa"])
-
-            total_rewards.append(ep_rew)
-
-        avg_cpa = float(np.mean(cpa_list)) if cpa_list else 5000.0
-        safety_score = float(np.clip(avg_cpa / 1000.0, 0.0, 1.0))
-
-        return {
-            "average_reward": float(np.mean(total_rewards)),
-            "safety_score": safety_score,
-            "efficiency_score": 0.85,
-            "colregs_violation_rate": 0.05,
-            "communication_utilization": communication_degradation * 0.7,
-        }
+        return _evaluate_policies(env, policies, n_episodes, communication_degradation)
 
     def save_checkpoint(self, filepath: str) -> None:
         os.makedirs(os.path.dirname(os.path.abspath(filepath)), exist_ok=True)

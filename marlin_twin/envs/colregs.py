@@ -17,15 +17,24 @@ class COLREGsEngine:
 
     @staticmethod
     def classify_encounter(
-        state_i: VesselState, state_j: VesselState, cpa_dist: float
+        state_i: VesselState,
+        state_j: VesselState,
+        cpa_dist: float,
+        max_range: float = 5556.0,
+        max_cpa: float = 1852.0,
     ) -> tuple[EncounterType, COLREGsRule | None]:
         """
         Classify encounter geometry between vessel_i and vessel_j based on relative bearing.
         Bearing is relative to vessel_i's heading.
+
+        `max_range`/`max_cpa` default to 3nm/1nm (full CLEAR-weather visibility)
+        but shrink under degraded visibility (see `MaritimeCoordEnv.step`), so
+        restricted visibility actually delays/reduces encounter classification
+        rather than just labeling the weather condition.
         """
         rel_pos = state_j.position() - state_i.position()
         dist = np.linalg.norm(rel_pos)
-        if dist > 5556.0 or cpa_dist > 1852.0:  # 3 nautical miles / 1 nautical mile CPA
+        if dist > max_range or cpa_dist > max_cpa:
             return EncounterType.NO_ENCOUNTER, None
 
         # Relative bearing from i to j (0 = dead ahead, pi/2 = starboard, -pi/2 = port)

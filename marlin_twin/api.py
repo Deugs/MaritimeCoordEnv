@@ -35,6 +35,7 @@ from marlin_twin.data_classes import (
     MaritimeExperimentConfig,
     MaritimeExperimentResult,
     CommunicationStatus,
+    CommsScheduleEvent,
     VesselType,
 )
 from marlin_twin.envs.base_env import BaseMaritimeEnvironment
@@ -292,6 +293,20 @@ class MarlinTwinAPI:
             config_dict["boundaries"] = tuple(config_dict["boundaries"])
         if "vessel_types" in config_dict:
             config_dict["vessel_types"] = [VesselType[name] for name in config_dict["vessel_types"]]
+        if "environment_condition" in config_dict:
+            config_dict["environment_condition"] = EnvironmentCondition[
+                config_dict["environment_condition"]
+            ]
+        if "comms_schedule" in config_dict:
+            config_dict["comms_schedule"] = [
+                CommsScheduleEvent(
+                    t_start=e["t_start"],
+                    t_end=e["t_end"],
+                    degradation_level=e["degradation_level"],
+                    jamming_zone=tuple(e["jamming_zone"]) if e.get("jamming_zone") else None,
+                )
+                for e in config_dict["comms_schedule"]
+            ]
         self.config = MaritimeExperimentConfig(**config_dict)
         return self
 
@@ -299,14 +314,28 @@ class MarlinTwinAPI:
         """Save current configuration to file.
 
         Uses `yaml.safe_dump` (matching `load_config`'s `yaml.safe_load`) so the
-        round-trip actually works — `MaritimeExperimentConfig`'s `boundaries`
-        (a tuple) and `vessel_types` (a list of `VesselType` enums) aren't
-        representable by the safe dumper as-is, so they're converted to a
-        plain list and enum names first and converted back on load.
+        round-trip actually works — several `MaritimeExperimentConfig` fields
+        aren't representable by the safe dumper as-is and are converted to
+        plain, round-trippable types first (converted back on load):
+        `boundaries` (a tuple) and each `CommsScheduleEvent.jamming_zone` (a
+        tuple) to plain lists, `vessel_types` (a list of `VesselType` enums)
+        and `environment_condition` (an `EnvironmentCondition` enum) to enum
+        names, and `comms_schedule` (a list of `CommsScheduleEvent`
+        dataclass instances) to plain dicts.
         """
         config_dict = dict(self.config.__dict__)
         config_dict["boundaries"] = list(config_dict["boundaries"])
         config_dict["vessel_types"] = [vt.name for vt in config_dict["vessel_types"]]
+        config_dict["environment_condition"] = config_dict["environment_condition"].name
+        config_dict["comms_schedule"] = [
+            {
+                "t_start": e.t_start,
+                "t_end": e.t_end,
+                "degradation_level": e.degradation_level,
+                "jamming_zone": list(e.jamming_zone) if e.jamming_zone else None,
+            }
+            for e in config_dict["comms_schedule"]
+        ]
         with open(path, "w") as f:
             yaml.safe_dump(config_dict, f)
 
