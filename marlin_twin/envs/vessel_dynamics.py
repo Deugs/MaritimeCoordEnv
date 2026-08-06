@@ -166,10 +166,19 @@ class MMGDynamicsSolver:
         angle_deg: float = 10.0,
         duration: float = 400.0,
         dt: float = 1.0,
-    ) -> dict[str, float | list[VesselState]]:
+    ) -> dict[str, float | bool | list[VesselState] | None]:
         """
         Executes standard IMO 10/10 or 20/20 Zig-zag Sea Trial.
         Measures First and Second Yaw Overshoot Angles.
+
+        A vessel that is too sluggish (or given too short a `duration`) for
+        this rudder angle may never complete the first and/or second
+        overshoot within the test window. `first_overshoot_angle`/
+        `second_overshoot_angle` are `None` in that case -- check
+        `first_overshoot_converged`/`second_overshoot_converged` before
+        trusting either value. Do not substitute a placeholder number for
+        a maneuver that didn't actually complete; that would misrepresent
+        a non-convergent run as a real sea-trial measurement.
         """
         state = initial_state or VesselState(
             vessel_id=0, x=0.0, y=0.0, heading=0.0, speed=8.0, surge_velocity=8.0
@@ -215,11 +224,13 @@ class MMGDynamicsSolver:
                     overshoots.append(float(np.degrees(max_heading_phase - target_heading_change)))
                     phase = 4
 
-        first_overshoot = overshoots[0] if len(overshoots) > 0 else 2.5
-        second_overshoot = overshoots[1] if len(overshoots) > 1 else 3.1
+        first_overshoot = overshoots[0] if len(overshoots) > 0 else None
+        second_overshoot = overshoots[1] if len(overshoots) > 1 else None
 
         return {
-            "first_overshoot_angle": float(first_overshoot),
-            "second_overshoot_angle": float(second_overshoot),
+            "first_overshoot_angle": first_overshoot,
+            "second_overshoot_angle": second_overshoot,
+            "first_overshoot_converged": len(overshoots) > 0,
+            "second_overshoot_converged": len(overshoots) > 1,
             "trajectory": trajectory,
         }
