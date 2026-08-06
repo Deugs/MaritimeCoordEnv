@@ -85,7 +85,7 @@ class ScenarioGenerator:
                 X_u=profile["X_u"],
                 Y_v=profile["Y_v"],
                 N_r=profile["N_r"],
-                propeller_diameter=4.0,
+                propeller_diameter=profile["propeller_diameter"],
                 max_rpm=profile["max_rpm"],
                 rudder_area=profile["rudder_area"],
             )
