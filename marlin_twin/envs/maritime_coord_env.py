@@ -8,6 +8,7 @@ from marlin_twin.data_classes import (
     VesselAction,
     EnvironmentCondition,
     MaritimeMessage,
+    AISReading,
 )
 from marlin_twin.envs.base_env import BaseMaritimeEnvironment
 from marlin_twin.envs.scenarios import ScenarioGenerator
@@ -115,37 +116,13 @@ class MaritimeCoordEnv(BaseMaritimeEnvironment):
             ag.last_action = action
             new_states[vid] = new_state
 
-        # Step 2: Sensors & Digital Twin Update
-        drop_prob = float(np.clip(1.0 - self.comms_degradation_level, 0.0, 0.98))
-        visibility_factor = (
-            self._visibility_range / VISIBILITY_BY_CONDITION[EnvironmentCondition.CLEAR]
-        )
-        noise_scale = 1.0 / max(visibility_factor, 1e-6)
-        ais_readings = [
-            SensorSimulator.generate_ais(
-                s, float(self.time_step), drop_prob=drop_prob, noise_scale=noise_scale
-            )
-            for s in new_states.values()
-        ]
-        ais_readings = [r for r in ais_readings if r is not None]
-        radar_tracks = [
-            SensorSimulator.generate_radar(s, float(self.time_step), idx, noise_scale=noise_scale)
-            for idx, s in enumerate(new_states.values())
-        ]
-
-        dt_scene = self.dt_estimator.update(
-            f"scene_{self.time_step}", float(self.time_step), new_states, ais_readings, radar_tracks
-        )
-        self.scene.digital_twin = dt_scene
-
-        # Step 3: Encounters & COLREGs Compliance — range/CPA gates shrink
-        # under degraded visibility so restricted visibility genuinely
-        # reduces/delays what counts as an "encounter," not just a label.
-        encounters = EncounterManager.detect_encounters(
-            new_states, max_range=5556.0 * visibility_factor, max_cpa=1852.0 * visibility_factor
-        )
-
-        # Step 4: Process Communication Messages
+        # Step 2: Process Communication Messages -- moved ahead of the
+        # sensor/Digital Twin update below so a successfully-delivered V2V
+        # self-report can supplement (or substitute for) a dropped AIS
+        # packet there. Previously this ran last and its `delivered` return
+        # value was discarded entirely, so this channel's bandwidth/
+        # packet-loss degradation had zero effect on anything the policy
+        # could actually see.
         outgoing = []
         for vid, act in actions.items():
             for target in act.message_targets:
@@ -168,7 +145,82 @@ class MaritimeCoordEnv(BaseMaritimeEnvironment):
                 )
 
         weather = 1.0 - self.comms_degradation_level
-        self.comm_manager.process_step(outgoing, weather_degradation=weather)
+        delivered = self.comm_manager.process_step(outgoing, weather_degradation=weather)
+
+        # Step 3: Sensors & Digital Twin Update
+        drop_prob = float(np.clip(1.0 - self.comms_degradation_level, 0.0, 0.98))
+        visibility_factor = (
+            self._visibility_range / VISIBILITY_BY_CONDITION[EnvironmentCondition.CLEAR]
+        )
+        noise_scale = 1.0 / max(visibility_factor, 1e-6)
+        ais_readings = [
+            SensorSimulator.generate_ais(
+                s, float(self.time_step), drop_prob=drop_prob, noise_scale=noise_scale
+            )
+            for s in new_states.values()
+        ]
+        ais_by_vid = {r.vessel_id: r for r in ais_readings if r is not None}
+
+        # A delivered V2V message is the sender reporting its own state --
+        # an independent fix, on top of (or in place of) whatever AIS
+        # already provided, so degraded bandwidth/packet-loss actually
+        # reaches the Digital Twin's estimate quality instead of being
+        # computed and discarded.
+        for msg in delivered:
+            if (
+                msg.sender_id not in ais_by_vid
+                and msg.content is not None
+                and len(msg.content) >= 4
+            ):
+                ais_by_vid[msg.sender_id] = AISReading(
+                    vessel_id=msg.sender_id,
+                    timestamp=float(self.time_step),
+                    reported_position=(float(msg.content[0]), float(msg.content[1])),
+                    reported_heading=float(msg.content[2]),
+                    reported_speed=float(msg.content[3]),
+                    confidence=0.9,
+                )
+        ais_readings = list(ais_by_vid.values())
+
+        # Radar is a self-contained onboard sensor, so it stays largely
+        # independent of ordinary communication-bandwidth degradation
+        # (unlike AIS, which needs a working transponder/channel) -- but
+        # broadband RF jamming realistically can blind radar too, so a
+        # vessel actively inside an active jamming zone gets a near-total
+        # miss probability instead of the small ambient one. Without this,
+        # radar silently backstops every dropped AIS packet every step
+        # regardless of degradation level, masking any observable effect of
+        # `comms_degradation_level` on perception quality.
+        radar_drop_prob = float(np.clip(0.4 * (1.0 - self.comms_degradation_level), 0.0, 0.4))
+        channel = self.scene.communication_channel
+        jamming_zone = channel.jamming_zone if channel.jamming_active else None
+        radar_tracks = []
+        for idx, s in enumerate(new_states.values()):
+            in_jamming_zone = False
+            if jamming_zone is not None:
+                zx, zy, zr = jamming_zone
+                in_jamming_zone = float(np.hypot(s.x - zx, s.y - zy)) <= zr
+            track = SensorSimulator.generate_radar(
+                s,
+                float(self.time_step),
+                idx,
+                noise_scale=noise_scale,
+                drop_prob=0.9 if in_jamming_zone else radar_drop_prob,
+            )
+            if track is not None:
+                radar_tracks.append(track)
+
+        dt_scene = self.dt_estimator.update(
+            f"scene_{self.time_step}", float(self.time_step), new_states, ais_readings, radar_tracks
+        )
+        self.scene.digital_twin = dt_scene
+
+        # Step 4: Encounters & COLREGs Compliance — range/CPA gates shrink
+        # under degraded visibility so restricted visibility genuinely
+        # reduces/delays what counts as an "encounter," not just a label.
+        encounters = EncounterManager.detect_encounters(
+            new_states, max_range=5556.0 * visibility_factor, max_cpa=1852.0 * visibility_factor
+        )
 
         # Step 5: Compute Rewards
         rewards = {}

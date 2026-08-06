@@ -24,6 +24,18 @@ def test_sensor_simulator_noise_and_sweeps():
     radar = SensorSimulator.generate_radar(state, timestamp=0.0, track_id=101)
     assert radar.track_id == 101
 
+    # drop_prob=0.0 (the default) never drops -- existing callers (e.g.
+    # generate_scene_sensors) that don't pass it keep today's behavior.
+    for _ in range(20):
+        assert SensorSimulator.generate_radar(state, timestamp=0.0, track_id=1) is not None
+
+    # drop_prob=1.0 always drops -- lets a caller model a vessel actively
+    # inside a jamming zone as a near-certain missed detection.
+    for _ in range(20):
+        assert (
+            SensorSimulator.generate_radar(state, timestamp=0.0, track_id=1, drop_prob=1.0) is None
+        )
+
     scene_states = {
         0: state,
         1: VesselState(vessel_id=1, x=500.0, y=500.0, heading=np.pi, speed=8.0),
