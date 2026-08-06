@@ -9,11 +9,11 @@ from marlin_twin.data_classes import (
     EnvironmentCondition,
 )
 from marlin_twin.envs.maritime_coord_env import MaritimeCoordEnv
-from marlin_twin.agents.observation_builder import ObservationBuilder
 from marlin_twin.baselines.independent_ppo import IndependentPPOPolicy
 from marlin_twin.baselines.maddpg import MADDPGPolicy
 from marlin_twin.baselines.rule_based import RuleBasedCOLREGsController
 from marlin_twin.baselines.factory import BaselineFactory
+from marlin_twin.training.mappo import _build_scene_graph
 
 
 def _make_observation(own_state: VesselState, neighbor_states: dict) -> VesselObservation:
@@ -46,12 +46,17 @@ def test_independent_ppo_and_maddpg_act_like_gat_policy():
     config = MaritimeExperimentConfig(scenario_type="head_on", n_vessels=2)
     env = MaritimeCoordEnv(config)
     obs, _ = env.reset(seed=1)
-    vec = ObservationBuilder.to_vector(obs[0])
+    graph, node_idx_map = _build_scene_graph(env, obs.keys(), float(env.time_step))
 
-    for policy_cls in [IndependentPPOPolicy, MADDPGPolicy]:
-        action = policy_cls().act(vec, deterministic=True)
-        assert action.shape == (2,)
-        assert np.all(np.isfinite(action))
+    ippo_action = IndependentPPOPolicy().act(obs[0], deterministic=True)
+    assert ippo_action.shape == (2,)
+    assert np.all(np.isfinite(ippo_action))
+
+    maddpg_action = MADDPGPolicy(n_vessels=2).act(
+        obs[0], graph, node_idx_map[0], deterministic=True
+    )
+    assert maddpg_action.shape == (2,)
+    assert np.all(np.isfinite(maddpg_action))
 
 
 def test_rule_based_controller_alters_course_on_close_head_on_encounter():

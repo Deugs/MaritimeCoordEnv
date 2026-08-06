@@ -28,6 +28,6 @@ class BaselineFactory:
         elif algorithm == "independent_ppo":
             return {i: IndependentPPOPolicy() for i in range(n_vessels)}
         elif algorithm == "maddpg":
-            return {i: MADDPGPolicy() for i in range(n_vessels)}
+            return {i: MADDPGPolicy(n_vessels=n_vessels) for i in range(n_vessels)}
         else:
             raise ValueError(f"Unknown baseline algorithm: {algorithm}")

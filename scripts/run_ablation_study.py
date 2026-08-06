@@ -107,9 +107,9 @@ def main():
                             f"{ckpt_path}: {e}. Evaluating with an untrained policy instead."
                         )
 
-        def select_action(env, vid, policy, agent_obs):
+        def select_action(env, vid, policy, agent_obs, graph, node_idx):
             wrapper = VesselAgentWrapper(env.get_scene().vessels[vid], policy)
-            return wrapper.select_action(agent_obs, deterministic=True)
+            return wrapper.select_action(agent_obs, graph, node_idx, deterministic=True)
 
         scores_per_level = run_degradation_sweep(
             config,

@@ -12,9 +12,11 @@ from pathlib import Path
 
 import numpy as np
 import matplotlib.pyplot as plt
-from marlin_twin.data_classes import MaritimeExperimentConfig
+from marlin_twin.data_classes import MaritimeExperimentConfig, VesselAction
 from marlin_twin.envs.maritime_coord_env import MaritimeCoordEnv
+from marlin_twin.agents.vessel_agent import VesselAgentWrapper
 from marlin_twin.baselines.factory import BaselineFactory
+from marlin_twin.training.mappo import _build_scene_graph
 from marlin_twin.utils.metrics import compute_resilience_index
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -47,6 +49,7 @@ def main():
 
     for alg in algorithms:
         policies = factory.create(alg)
+        uses_graph = any(getattr(p, "USES_GRAPH", False) for p in policies.values())
         print(f"\n   Testing Algorithm: {alg_labels[alg]}")
 
         for lam in degradation_levels:
@@ -58,24 +61,27 @@ def main():
             ep_rewards = []
 
             while not done:
+                if uses_graph:
+                    graph, node_idx_map = _build_scene_graph(env, obs.keys(), float(env.time_step))
+                else:
+                    graph, node_idx_map = None, {}
+
                 actions = {}
                 for vid, agent_obs in obs.items():
                     pol = policies[vid]
                     if alg == "rule_based":
-                        act_vec = pol.act(agent_obs)
-                    else:
-                        act_vec = pol.act(
-                            np.random.randn(32).astype(np.float32), deterministic=True
+                        act_vec = pol.act(agent_obs, deterministic=True)
+                        actions[vid] = VesselAction(
+                            vessel_id=vid,
+                            propeller_rpm=float(act_vec[0]),
+                            rudder_angle=float(act_vec[1]),
+                            message_targets=[],
                         )
-
-                    from marlin_twin.data_classes import VesselAction
-
-                    actions[vid] = VesselAction(
-                        vessel_id=vid,
-                        propeller_rpm=float(act_vec[0] * 0.5 + 0.5),
-                        rudder_angle=float(act_vec[1] * 0.5),
-                        message_targets=[],
-                    )
+                    else:
+                        wrapper = VesselAgentWrapper(env.get_scene().vessels[vid], pol)
+                        actions[vid] = wrapper.select_action(
+                            agent_obs, graph, node_idx_map.get(vid), deterministic=True
+                        )
 
                 obs, rewards, team_reward, done, info = env.step(actions)
                 ep_rewards.append(team_reward)

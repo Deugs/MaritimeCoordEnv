@@ -8,13 +8,16 @@ Usage:
 """
 
 import os
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
 import matplotlib.pyplot as plt
-from marlin_twin.data_classes import MaritimeExperimentConfig, VesselAction, MessagePriority
+from marlin_twin.data_classes import MaritimeExperimentConfig, MessagePriority
 from marlin_twin.envs.maritime_coord_env import MaritimeCoordEnv
 from marlin_twin.agents.policies import GATPolicy
+from marlin_twin.agents.vessel_agent import VesselAgentWrapper
+from marlin_twin.training.mappo import _build_scene_graph
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -40,18 +43,15 @@ def main():
         delivered_counts = []
 
         for step in range(50):
+            graph, node_idx_map = _build_scene_graph(env, obs.keys(), float(env.time_step))
             actions = {}
             for vid, agent_obs in obs.items():
-                act_vec = policies[vid].act(
-                    agent_obs.own_state.x / 5000.0 * np.ones(32, dtype=np.float32),
-                    deterministic=True,
+                wrapper = VesselAgentWrapper(env.get_scene().vessels[vid], policies[vid])
+                act = wrapper.select_action(
+                    agent_obs, graph, node_idx_map.get(vid), deterministic=True
                 )
-                actions[vid] = VesselAction(
-                    vessel_id=vid,
-                    propeller_rpm=float(act_vec[0] * 0.5 + 0.5),
-                    rudder_angle=float(act_vec[1] * 0.5),
-                    message_targets=[(vid + 1) % 5],
-                    message_priority=MessagePriority.HIGH,
+                actions[vid] = replace(
+                    act, message_targets=[(vid + 1) % 5], message_priority=MessagePriority.HIGH
                 )
 
             obs, rewards, team_reward, done, info = env.step(actions)

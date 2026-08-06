@@ -71,9 +71,20 @@ class EncounterManager:
 
     @classmethod
     def build_encounter_graph(
-        cls, states: dict[int, VesselState], timestamp: float
+        cls,
+        states: dict[int, VesselState],
+        timestamp: float,
+        include_self_loops: bool = True,
     ) -> EncounterGraph:
-        """Build dynamic encounter graph for GNN policy encoding."""
+        """Build dynamic encounter graph for GNN policy encoding.
+
+        `include_self_loops` adds a zero-featured (i, i) edge for every node.
+        `GATEncoder.forward`'s attention aggregation only sums over a node's
+        *incoming* edges, so without a self-loop a node's own projected
+        features never contribute to its own output embedding once it has
+        any real neighbors — self-loops are what let the encoder actually
+        preserve a vessel's identity/own-state alongside its neighbors'.
+        """
         v_ids = sorted(list(states.keys()))
         n_nodes = len(v_ids)
 
@@ -107,6 +118,12 @@ class EncounterManager:
                         [dist / 5000.0, tcpa / 600.0, dcpa / 1000.0, cpa_dist / 1000.0]
                     )
                     edge_types.append("proximity")
+
+        if include_self_loops:
+            for i in range(n_nodes):
+                edges.append([i, i])
+                edge_feats.append([0.0, 0.0, 0.0, 0.0])
+                edge_types.append("self")
 
         edge_index = (
             np.array(edges, dtype=np.int64).T if edges else np.zeros((2, 0), dtype=np.int64)

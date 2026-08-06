@@ -20,12 +20,25 @@ from loguru import logger
 from marlin_twin.data_classes import MaritimeExperimentConfig, VesselAction
 from marlin_twin.envs.maritime_coord_env import MaritimeCoordEnv
 from marlin_twin.agents.policies import GATPolicy
+from marlin_twin.baselines.independent_ppo import IndependentPPOPolicy
+from marlin_twin.baselines.maddpg import MADDPGPolicy
 from marlin_twin.baselines.rule_based import RuleBasedCOLREGsController
 from marlin_twin.agents.vessel_agent import VesselAgentWrapper
+from marlin_twin.training.mappo import _build_scene_graph
 from marlin_twin.utils.metrics import compute_resilience_index
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _eval_common import REPO_ROOT, run_degradation_sweep  # noqa: E402
+
+
+def make_policy(model: str, n_vessels: int):
+    if model == "marlin_twin":
+        return GATPolicy()
+    if model == "independent_ppo":
+        return IndependentPPOPolicy()
+    if model == "maddpg":
+        return MADDPGPolicy(n_vessels=n_vessels)
+    raise ValueError(f"Unknown model: {model}")
 
 
 def setup_ieee_style():
@@ -50,13 +63,19 @@ def main():
     degradation_levels = np.linspace(0.0, 1.0, 6)
     eval_seeds = [100, 101, 102, 103, 104]
 
-    models = ["marlin_twin", "independent_ppo", "rule_based"]
+    models = ["marlin_twin", "independent_ppo", "maddpg", "rule_based"]
     model_labels = {
         "marlin_twin": "MARLIN-Twin (MAPPO + GAT + DT EKF)",
         "independent_ppo": "Independent PPO (No Comms)",
+        "maddpg": "MADDPG Baseline",
         "rule_based": "Rule-Based COLREGs",
     }
-    colors = {"marlin_twin": "#1f77b4", "independent_ppo": "#ff7f0e", "rule_based": "#2ca02c"}
+    colors = {
+        "marlin_twin": "#1f77b4",
+        "independent_ppo": "#ff7f0e",
+        "maddpg": "#2ca02c",
+        "rule_based": "#d62728",
+    }
 
     # 1. Communication Degradation Sweep
     print("\n1. Running Communication Degradation Sweep (Figure 11)...")
@@ -68,7 +87,7 @@ def main():
             if model == "rule_based":
                 return {i: RuleBasedCOLREGsController(i) for i in range(2)}
 
-            pols = {i: GATPolicy() for i in range(2)}
+            pols = {i: make_policy(model, n_vessels=2) for i in range(2)}
             ckpt = os.path.join(REPO_ROOT, "checkpoints", f"{model}_seed_42.pt")
             if os.path.exists(ckpt):
                 data = torch.load(ckpt, weights_only=True)
@@ -85,17 +104,17 @@ def main():
 
         return factory
 
-    def select_action(env, vid, policy, agent_obs, model):
-        if model in ["marlin_twin", "independent_ppo"]:
-            wrapper = VesselAgentWrapper(env.get_scene().vessels[vid], policy)
-            return wrapper.select_action(agent_obs, deterministic=True)
-        act_arr = policy.act(agent_obs, deterministic=True)
-        return VesselAction(
-            vessel_id=vid,
-            propeller_rpm=float(act_arr[0]),
-            rudder_angle=float(act_arr[1]),
-            message_targets=[],
-        )
+    def select_action(env, vid, policy, agent_obs, model, graph, node_idx):
+        if model == "rule_based":
+            act_arr = policy.act(agent_obs, deterministic=True)
+            return VesselAction(
+                vessel_id=vid,
+                propeller_rpm=float(act_arr[0]),
+                rudder_angle=float(act_arr[1]),
+                message_targets=[],
+            )
+        wrapper = VesselAgentWrapper(env.get_scene().vessels[vid], policy)
+        return wrapper.select_action(agent_obs, graph, node_idx, deterministic=True)
 
     for model in models:
         scores_per_level = run_degradation_sweep(
@@ -103,8 +122,8 @@ def main():
             make_policies_factory(model),
             degradation_levels,
             eval_seeds,
-            lambda env, vid, policy, agent_obs, model=model: select_action(
-                env, vid, policy, agent_obs, model
+            lambda env, vid, policy, agent_obs, graph, node_idx, model=model: select_action(
+                env, vid, policy, agent_obs, model, graph, node_idx
             ),
         )
         results_deg[model] = [float(np.mean(seed_scores)) for seed_scores in scores_per_level]
@@ -161,30 +180,38 @@ def main():
                 )
                 env = MaritimeCoordEnv(config)
 
-                if model == "marlin_twin":
-                    pols = {i: GATPolicy() for i in range(2)}
-                elif model == "independent_ppo":
-                    pols = {i: GATPolicy() for i in range(2)}
-                elif model == "rule_based":
+                if model == "rule_based":
                     pols = {i: RuleBasedCOLREGsController(i) for i in range(2)}
+                else:
+                    pols = {i: make_policy(model, n_vessels=2) for i in range(2)}
 
+                uses_graph = any(getattr(p, "USES_GRAPH", False) for p in pols.values())
                 obs, _ = env.reset(seed=seed)
                 done = False
                 min_dist = 5000.0
 
                 while not done:
+                    if uses_graph:
+                        graph, node_idx_map = _build_scene_graph(
+                            env, obs.keys(), float(env.time_step)
+                        )
+                    else:
+                        graph, node_idx_map = None, {}
+
                     actions = {}
                     for vid, agent_obs in obs.items():
-                        if model in ["marlin_twin", "independent_ppo"]:
-                            wrapper = VesselAgentWrapper(env.get_scene().vessels[vid], pols[vid])
-                            actions[vid] = wrapper.select_action(agent_obs, deterministic=True)
-                        else:
+                        if model == "rule_based":
                             act_arr = pols[vid].act(agent_obs, deterministic=True)
                             actions[vid] = VesselAction(
                                 vessel_id=vid,
                                 propeller_rpm=float(act_arr[0]),
                                 rudder_angle=float(act_arr[1]),
                                 message_targets=[],
+                            )
+                        else:
+                            wrapper = VesselAgentWrapper(env.get_scene().vessels[vid], pols[vid])
+                            actions[vid] = wrapper.select_action(
+                                agent_obs, graph, node_idx_map.get(vid), deterministic=True
                             )
 
                     obs, _, team_reward, done, info = env.step(actions)

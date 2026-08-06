@@ -11,7 +11,7 @@ from marlin_twin.envs.maritime_coord_env import MaritimeCoordEnv
 
 
 def test_rollout_buffer_gae_computation():
-    buffer = RolloutBuffer(buffer_size=10, n_vessels=2, obs_dim=32, act_dim=2)
+    buffer = RolloutBuffer(buffer_size=10, n_vessels=2, feat_dim=32, act_dim=2)
     for t in range(10):
         obs = np.random.randn(2, 32).astype(np.float32)
         act = np.random.randn(2, 2).astype(np.float32)

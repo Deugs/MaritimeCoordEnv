@@ -7,6 +7,7 @@ import numpy as np
 
 from marlin_twin.data_classes import MaritimeExperimentConfig
 from marlin_twin.envs.maritime_coord_env import MaritimeCoordEnv
+from marlin_twin.training.mappo import _build_scene_graph
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -26,6 +27,11 @@ def run_degradation_sweep(
     converts it into a safety score via ``clip(min_dist / 500.0, 0.05, 1.0)``.
     Returns the per-seed safety scores for each degradation level (callers
     aggregate mean/std as needed).
+
+    `select_action(env, vid, policy, agent_obs, graph, node_idx)` — `graph`/
+    `node_idx` are the shared per-step scene graph and this vessel's node
+    index within it, built once per step if any policy in the set is
+    graph-based (`USES_GRAPH`); both are `None` otherwise.
     """
     scores_per_level = []
     for lam in degradation_levels:
@@ -37,14 +43,22 @@ def run_degradation_sweep(
                 env.dt_estimator.enabled = False
 
             policies = policies_factory()
+            uses_graph = any(getattr(p, "USES_GRAPH", False) for p in policies.values())
             obs, _ = env.reset(seed=seed)
             done = False
             min_dist = 5000.0
 
             while not done:
+                if uses_graph:
+                    graph, node_idx_map = _build_scene_graph(env, obs.keys(), float(env.time_step))
+                else:
+                    graph, node_idx_map = None, {}
+
                 actions = {}
                 for vid, agent_obs in obs.items():
-                    actions[vid] = select_action(env, vid, policies[vid], agent_obs)
+                    actions[vid] = select_action(
+                        env, vid, policies[vid], agent_obs, graph, node_idx_map.get(vid)
+                    )
 
                 obs, _, _, done, _ = env.step(actions)
 
