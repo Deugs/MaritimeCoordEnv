@@ -316,8 +316,8 @@ def render_fig8_degradation_heatmap() -> dict:
     MARLIN-Twin rollout at each degradation level, plus real bandwidth_bps/capacity%
     from CommunicationChannelManager.set_degradation (not hardcoded numbers)."""
     degradation_levels = [1.0, 0.8, 0.6, 0.4, 0.2, 0.0]
-    eval_seeds = [100, 101, 102, 103]
-    config = MaritimeExperimentConfig(scenario_type="head_on", n_vessels=2, episode_length=300)
+    eval_seeds = [100, 101]
+    config = MaritimeExperimentConfig(scenario_type="head_on", n_vessels=2, episode_length=150)
 
     mean_rewards = []
     bandwidth_bps_vals = []
@@ -408,7 +408,7 @@ def render_fig9_benchmark_resilience() -> dict:
     same real degradation sweep + compute_resilience_index used by run_ablation_study.py
     and run_full_evaluation_suite.py, not hardcoded per-algorithm constants."""
     degradation_levels = [1.0, 0.8, 0.6, 0.4, 0.2, 0.0]
-    eval_seeds = [100, 101, 102, 103]
+    eval_seeds = [100, 101]
     models = ["marlin_twin", "independent_ppo", "maddpg", "rule_based"]
     model_labels = {
         "marlin_twin": "MARLIN-Twin (GAT)",
@@ -424,7 +424,7 @@ def render_fig9_benchmark_resilience() -> dict:
     }
     styles = {"marlin_twin": "o-", "independent_ppo": "s--", "maddpg": "^-.", "rule_based": "d:"}
 
-    config = MaritimeExperimentConfig(scenario_type="head_on", n_vessels=2, episode_length=300)
+    config = MaritimeExperimentConfig(scenario_type="head_on", n_vessels=2, episode_length=150)
 
     def make_policies_factory(model):
         def factory():
