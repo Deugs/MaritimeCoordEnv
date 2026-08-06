@@ -10,6 +10,25 @@ actually drive `VesselDynamics.compute_derivatives` (added mass
 `X_u_dot/Y_v_dot/N_r_dot`, damping `X_u/Y_v/N_r`, and `max_rpm`/
 `rudder_area`).
 
+`thrust_coefficient` is *derived*, not estimated: it's the value that makes
+`compute_derivatives`' thrust/drag steady-state balance land exactly on this
+type's own `max_speed` at full throttle (rpm_fraction=1.0), solving
+`thrust_coefficient = (-X_u * max_speed**2) / ((max_rpm/60)**2 *
+propeller_diameter**4)` for each type individually — a single shared
+constant can't hit every type's own max_speed because their thrust/drag
+ratios differ (see `VesselDynamics.thrust_coefficient`'s docstring for why a
+global default doesn't work).
+
+`yaw_coefficient` is derived the same way, targeting a steady turning
+radius of `turning_circle / 2` at 80%-throttle cruise speed and full
+30-degree rudder: `yaw_coefficient = (-N_r_dot * r_target) / (max_rudder_angle
+* rudder_area * u_cruise**2)` where `r_target = u_cruise / (turning_circle /
+2)` and `u_cruise = 0.8 * max_speed`. This ignores the (much smaller)
+quadratic `N_r` damping term, so the resulting turning circle lands in the
+right order of magnitude relative to `turning_circle`, not exactly on it —
+see the Limitations discussion in the paper for why an exact match isn't
+claimed.
+
 **Provenance — read before trusting any single number.** Only `TANKER`'s
 `length`/`beam`/`draft`/`mass`/`max_speed`/`propeller_diameter`/`rudder_area`
 are grounded in a real, named vessel (see `# CITED` comments on that entry
@@ -73,6 +92,8 @@ VESSEL_PROFILES: dict[VesselType, dict] = {
         max_rpm=150.0,
         rudder_area=20.0,
         propeller_diameter=4.0,
+        thrust_coefficient=90.0,
+        yaw_coefficient=24.867960,
     ),
     VesselType.CONTAINER: dict(
         length=300.0,
@@ -91,6 +112,8 @@ VESSEL_PROFILES: dict[VesselType, dict] = {
         max_rpm=140.0,
         rudder_area=35.0,
         propeller_diameter=4.0,
+        thrust_coefficient=196.1396,
+        yaw_coefficient=34.201795,
     ),
     VesselType.TANKER: dict(
         # CITED — KVLCC2 principal dimensions (see module docstring).
@@ -125,6 +148,10 @@ VESSEL_PROFILES: dict[VesselType, dict] = {
         rudder_area=273.3,
         # CITED — KVLCC2 full-scale propeller diameter, 9.86 m.
         propeller_diameter=9.86,
+        # DERIVED — see module docstring; makes this hull's own thrust/drag
+        # balance reach its cited max_speed (7.97 m/s) at full throttle.
+        thrust_coefficient=15.1214,
+        yaw_coefficient=150.701001,
     ),
     VesselType.PASSENGER: dict(
         length=200.0,
@@ -143,6 +170,8 @@ VESSEL_PROFILES: dict[VesselType, dict] = {
         max_rpm=170.0,
         rudder_area=28.0,
         propeller_diameter=4.0,
+        thrust_coefficient=152.5952,
+        yaw_coefficient=24.360450,
     ),
     VesselType.USV: dict(
         length=30.0,
@@ -161,6 +190,8 @@ VESSEL_PROFILES: dict[VesselType, dict] = {
         max_rpm=180.0,
         rudder_area=4.0,
         propeller_diameter=4.0,
+        thrust_coefficient=25.0,
+        yaw_coefficient=49.735920,
     ),
     VesselType.FERRY: dict(
         length=100.0,
@@ -179,6 +210,8 @@ VESSEL_PROFILES: dict[VesselType, dict] = {
         max_rpm=190.0,
         rudder_area=22.0,
         propeller_diameter=4.0,
+        thrust_coefficient=78.8824,
+        yaw_coefficient=8.681179,
     ),
     VesselType.FISHING: dict(
         length=25.0,
@@ -197,5 +230,7 @@ VESSEL_PROFILES: dict[VesselType, dict] = {
         max_rpm=130.0,
         rudder_area=3.5,
         propeller_diameter=4.0,
+        thrust_coefficient=23.5901,
+        yaw_coefficient=60.630455,
     ),
 }

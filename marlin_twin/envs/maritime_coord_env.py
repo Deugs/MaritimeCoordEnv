@@ -276,9 +276,28 @@ class MaritimeCoordEnv(BaseMaritimeEnvironment):
         done = self.time_step >= self.config.episode_length
 
         obs = self._build_observations()
+        vessel_ids = list(new_states.keys())
+        true_pairwise_distances = [
+            float(np.linalg.norm(new_states[vessel_ids[i]].position() - new_states[vessel_ids[j]].position()))
+            for i in range(len(vessel_ids))
+            for j in range(i + 1, len(vessel_ids))
+        ]
         info = {
             "encounters": len(encounters),
+            # Projected CPA from EncounterManager.compute_cpa -- a per-step
+            # LINEAR extrapolation of current velocity, used for reward
+            # shaping above. It reads near-zero in the instant just before a
+            # vessel's rudder command actually changes its heading, even if
+            # the real (curving) trajectory never gets that close -- don't
+            # use it as a safety/resilience metric across an episode; use
+            # `true_min_pairwise_distance` below for that.
             "min_cpa": min([e.cpa_distance for e in encounters], default=5000.0),
+            # Actual Euclidean separation between every vessel pair's real
+            # (not projected, not estimated) position this step -- the
+            # quantity a true episode-minimum safety metric should reduce
+            # over, since it reflects what actually happened rather than a
+            # myopic one-step-ahead extrapolation.
+            "true_min_pairwise_distance": min(true_pairwise_distances, default=5000.0),
             "colregs_violations": colregs_violations,
         }
 

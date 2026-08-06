@@ -105,24 +105,32 @@ def render_fig5_sea_trials() -> dict:
     output, not a hand-drawn placeholder curve."""
     solver = MMGDynamicsSolver(_default_dynamics())
 
-    # run_turning_circle_test's tactical_diameter tracks max lateral deviation
-    # over the WHOLE run, not just up to one closed loop -- a duration much
-    # longer than one circle's period inflates it independent of the actual
-    # circle (a known, separate limitation of that test harness, not fixed
-    # here). Use the same duration as scripts/phase1_validation.py for this
-    # one; the zigzag needs its own much longer duration to converge (see
-    # run_zigzag_test's docstring).
-    #
     # rudder_angle_deg=30.0 -- VesselDynamics.max_rudder_angle defaults to
     # pi/6 (30 deg) and MMGDynamicsSolver.step() clamps every commanded
     # rudder angle to it, so a caller passing 35.0 here was silently
     # simulating a 30 deg turn while every caption/label claimed 35 deg.
-    tc_result = solver.run_turning_circle_test(rudder_angle_deg=30.0, duration=400.0)
-    zz_result = solver.run_zigzag_test(angle_deg=10.0, duration=6000.0)
+    #
+    # duration=1200/3200 -- after fixing the double-RPM-scaling thrust bug and
+    # deriving a real yaw_coefficient from each type's own turning_circle
+    # (see VesselDynamics.thrust_coefficient/yaw_coefficient), this vessel
+    # takes ~1000s to complete one full turning-circle loop and ~3000s to
+    # complete two zigzag overshoots; the old duration=400/6000 defaults
+    # predate both fixes and never converged under the corrected dynamics
+    # (see run_turning_circle_test's loop_completed / run_zigzag_test's
+    # *_converged flags -- always check them rather than trusting a
+    # returned number blindly).
+    tc_result = solver.run_turning_circle_test(rudder_angle_deg=30.0, duration=1200.0)
+    zz_result = solver.run_zigzag_test(angle_deg=10.0, duration=2900.0)
+    assert tc_result["loop_completed"], "turning circle did not complete a full loop"
+    assert zz_result["first_overshoot_converged"], "zigzag did not converge"
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(7.16, 3.2))
 
-    tc_traj = tc_result["trajectory"]
+    # Slice the plotted trajectory to the first completed loop only, matching
+    # what tactical_diameter/advance/transfer actually measure -- the full
+    # `duration` window runs a bit past loop completion and would otherwise
+    # plot a second partial loop on top of the first.
+    tc_traj = tc_result["trajectory"][: tc_result["loop_completed_step"] + 1]
     x_tc = [s.x for s in tc_traj]
     y_tc = [s.y for s in tc_traj]
     ax1.plot(y_tc, x_tc, "b-", lw=2, label="30 deg Starboard Turning Circle")
@@ -322,7 +330,7 @@ def render_fig8_degradation_heatmap() -> dict:
     from CommunicationChannelManager.set_degradation (not hardcoded numbers)."""
     degradation_levels = [1.0, 0.8, 0.6, 0.4, 0.2, 0.0]
     eval_seeds = [100, 101]
-    config = MaritimeExperimentConfig(scenario_type="head_on", n_vessels=2, episode_length=150)
+    config = MaritimeExperimentConfig(scenario_type="head_on", n_vessels=2, episode_length=500)
 
     mean_rewards = []
     bandwidth_bps_vals = []
@@ -429,7 +437,7 @@ def render_fig9_benchmark_resilience() -> dict:
     }
     styles = {"marlin_twin": "o-", "independent_ppo": "s--", "maddpg": "^-.", "rule_based": "d:"}
 
-    config = MaritimeExperimentConfig(scenario_type="head_on", n_vessels=2, episode_length=150)
+    config = MaritimeExperimentConfig(scenario_type="head_on", n_vessels=2, episode_length=500)
 
     def make_policies_factory(model):
         def factory():
@@ -521,7 +529,7 @@ def render_fig9_benchmark_resilience() -> dict:
     return {"safety_scores": results, "resilience_indices": resilience_indices}
 
 
-def render_fig10_extended_training(n_seeds: int = 5, total_episodes: int = 500) -> dict:
+def render_fig10_extended_training(n_seeds: int = 3, total_episodes: int = 200) -> dict:
     """Figure 10: Real 5-Seed Extended Curriculum Training Curves -- actual per-episode
     team reward recorded during real TwoStageCurriculumTrainer.train_curriculum runs,
     not a fabricated exponential-decay curve."""
@@ -530,7 +538,7 @@ def render_fig10_extended_training(n_seeds: int = 5, total_episodes: int = 500) 
 
     for seed in seeds:
         config = MaritimeExperimentConfig(
-            scenario_type="head_on", n_vessels=2, n_episodes=total_episodes, episode_length=40
+            scenario_type="head_on", n_vessels=2, n_episodes=total_episodes, episode_length=500
         )
         env = MaritimeCoordEnv(config)
         trainer = TwoStageCurriculumTrainer(config)

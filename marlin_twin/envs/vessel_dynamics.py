@@ -21,7 +21,11 @@ class MMGDynamicsSolver:
         environment: EnvironmentCondition = EnvironmentCondition.CLEAR,
     ) -> VesselState:
         """Integrate state forward by dt using RK4 integration."""
-        target_rpm = action.propeller_rpm * self.dynamics.max_rpm
+        # `compute_derivatives` multiplies its `propeller_rpm` argument by
+        # `self.max_rpm` itself to get real RPM, so passing the fraction
+        # straight through here (not pre-multiplying) avoids scaling by
+        # max_rpm twice -- a bug that was inflating thrust by ~150-180x.
+        target_rpm = action.propeller_rpm
         target_rudder = np.clip(
             action.rudder_angle, -self.dynamics.max_rudder_angle, self.dynamics.max_rudder_angle
         )
@@ -106,10 +110,22 @@ class MMGDynamicsSolver:
         rudder_angle_deg: float = 35.0,
         duration: float = 600.0,
         dt: float = 1.0,
-    ) -> dict[str, float | list[VesselState]]:
+    ) -> dict[str, float | bool | list[VesselState]]:
         """
         Executes standard IMO Turning Circle Sea Trial.
         Measures Tactical Diameter, Advance, and Transfer.
+
+        `tactical_diameter` is the max lateral deviation over the vessel's
+        *first complete 360-degree loop* (cumulative heading change reaching
+        2*pi), not over the whole `duration` window -- measuring over the
+        whole window would keep growing for as long as the run continues
+        past one closed loop, independent of the actual circle's size. If
+        the vessel hasn't completed a full loop by `duration` (a sluggish
+        vessel/weak rudder relative to `duration`), falls back to the
+        max-lateral-deviation-so-far with `loop_completed=False` so callers
+        can tell a real measurement from a truncated one, rather than
+        silently reporting a duration-dependent number as if it were the
+        circle's true diameter.
         """
         state = initial_state or VesselState(
             vessel_id=0,
@@ -132,12 +148,22 @@ class MMGDynamicsSolver:
         advance = 0.0
         transfer = 0.0
         found_90deg = False
+        loop_completed = False
+        loop_completed_step = None
+        cumulative_turn = 0.0
+        prev_heading = state.heading
 
         n_steps = int(duration / dt)
-        for _ in range(n_steps):
+        for step_idx in range(n_steps):
             state = self.step(state, action, dt)
             trajectory.append(state)
-            max_y = max(max_y, abs(state.y))
+
+            step_turn = (state.heading - prev_heading + np.pi) % (2 * np.pi) - np.pi
+            cumulative_turn += step_turn
+            prev_heading = state.heading
+
+            if not loop_completed:
+                max_y = max(max_y, abs(state.y))
 
             # Check 90 deg heading change
             heading_diff = abs(
@@ -148,6 +174,10 @@ class MMGDynamicsSolver:
                 transfer = abs(state.y)
                 found_90deg = True
 
+            if not loop_completed and abs(cumulative_turn) >= 2 * np.pi:
+                loop_completed = True
+                loop_completed_step = step_idx + 1
+
         tactical_diameter = max_y * 2.0
         if not found_90deg:
             advance = max([s.x for s in trajectory])
@@ -157,6 +187,8 @@ class MMGDynamicsSolver:
             "tactical_diameter": float(tactical_diameter),
             "advance": float(advance),
             "transfer": float(transfer),
+            "loop_completed": loop_completed,
+            "loop_completed_step": loop_completed_step,
             "trajectory": trajectory,
         }
 
