@@ -793,6 +793,7 @@ class MaritimeExperimentConfig:
     learning_rate: float = 3e-4
     gamma: float = 0.99
     gae_lambda: float = 0.95
+    tau: float = 0.01
 
     # Communication
     bandwidth_bps: float = 9600.0

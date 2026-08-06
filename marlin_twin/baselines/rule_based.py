@@ -11,7 +11,9 @@ class RuleBasedCOLREGsController:
     def __init__(self, vessel_id: int):
         self.vessel_id = vessel_id
 
-    def act(self, observation: VesselObservation, deterministic: bool = True) -> np.ndarray:
+    def act(
+        self, observation: VesselObservation, graph=None, node_idx=None, deterministic: bool = True
+    ) -> np.ndarray:
         rudder = 0.0
         rpm = 0.8
 

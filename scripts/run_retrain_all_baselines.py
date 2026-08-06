@@ -13,7 +13,10 @@ from pathlib import Path
 from marlin_twin.data_classes import MaritimeExperimentConfig
 from marlin_twin.envs.maritime_coord_env import MaritimeCoordEnv
 from marlin_twin.training.curriculum import TwoStageCurriculumTrainer
+from marlin_twin.training.maddpg import MADDPGTrainer
 from marlin_twin.agents.policies import GATPolicy, MeanPoolingPolicy, MLPPolicy
+from marlin_twin.baselines.independent_ppo import IndependentPPOPolicy
+from marlin_twin.baselines.maddpg import MADDPGPolicy
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -39,19 +42,28 @@ def retrain_variant(variant_name: str, seeds: list[int], n_episodes: int = 250):
         if variant_name == "ablation_no_digital_twin":
             env.dt_estimator.enabled = False
 
-        trainer = TwoStageCurriculumTrainer(config)
+        if variant_name == "maddpg":
+            # Off-policy CTDE, trained via MADDPGTrainer directly (not PPO's
+            # curriculum stages, which assume an on-policy rollout/update loop).
+            trainer = MADDPGTrainer(config)
+            trainer.policies = {
+                i: MADDPGPolicy(n_vessels=config.n_vessels) for i in range(config.n_vessels)
+            }
+            trainer.train(env, n_episodes=n_episodes)
+        else:
+            trainer = TwoStageCurriculumTrainer(config)
 
-        # Initialize specific policy architectures
-        if variant_name in ["marlin_twin", "ablation_no_digital_twin"]:
-            trainer.policies = {i: GATPolicy() for i in range(config.n_vessels)}
-        elif variant_name == "ablation_mean_pooling":
-            trainer.policies = {i: MeanPoolingPolicy() for i in range(config.n_vessels)}
-        elif variant_name == "ablation_flat_mlp":
-            trainer.policies = {i: MLPPolicy() for i in range(config.n_vessels)}
-        elif variant_name == "independent_ppo":
-            trainer.policies = {i: GATPolicy() for i in range(config.n_vessels)}
+            # Initialize specific policy architectures
+            if variant_name in ["marlin_twin", "ablation_no_digital_twin"]:
+                trainer.policies = {i: GATPolicy() for i in range(config.n_vessels)}
+            elif variant_name == "ablation_mean_pooling":
+                trainer.policies = {i: MeanPoolingPolicy() for i in range(config.n_vessels)}
+            elif variant_name == "ablation_flat_mlp":
+                trainer.policies = {i: MLPPolicy() for i in range(config.n_vessels)}
+            elif variant_name == "independent_ppo":
+                trainer.policies = {i: IndependentPPOPolicy() for i in range(config.n_vessels)}
 
-        trainer.train_curriculum(env, total_episodes=n_episodes)
+            trainer.train_curriculum(env, total_episodes=n_episodes)
 
         ckpt_path = os.path.join(REPO_ROOT, "checkpoints", f"{variant_name}_seed_{seed}.pt")
         trainer.save_checkpoint(ckpt_path)
@@ -67,6 +79,7 @@ def main():
         "ablation_flat_mlp",
         "ablation_no_digital_twin",
         "independent_ppo",
+        "maddpg",
     ]
 
     for var in variants:

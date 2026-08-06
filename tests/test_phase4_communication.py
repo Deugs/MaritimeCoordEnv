@@ -4,11 +4,12 @@
 
 import pytest
 import torch
-import numpy as np
-from marlin_twin.data_classes import VesselState
+from marlin_twin.data_classes import MaritimeExperimentConfig, VesselState
+from marlin_twin.envs.maritime_coord_env import MaritimeCoordEnv
 from marlin_twin.agents.networks import GATEncoder
 from marlin_twin.agents.communication_layer import CommunicationLayer
 from marlin_twin.agents.policies import GATPolicy
+from marlin_twin.training.mappo import _build_scene_graph
 
 
 def test_gat_encoder_attention_computation():
@@ -41,9 +42,13 @@ def test_decode_binary_rejects_wrong_length_payload():
 
 
 def test_gat_policy_action_generation():
-    policy = GATPolicy(obs_dim=32, action_dim=2)
-    obs = np.random.randn(32).astype(np.float32)
-    act = policy.act(obs, deterministic=True)
+    config = MaritimeExperimentConfig(scenario_type="channel", n_vessels=3)
+    env = MaritimeCoordEnv(config)
+    obs, _ = env.reset(seed=1)
+    graph, node_idx_map = _build_scene_graph(env, obs.keys(), float(env.time_step))
+
+    policy = GATPolicy(action_dim=2)
+    act = policy.act(obs[0], graph, node_idx_map[0], deterministic=True)
 
     assert act.shape == (2,)
     assert -1.0 <= act[0] <= 1.0

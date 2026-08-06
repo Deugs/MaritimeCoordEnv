@@ -13,12 +13,18 @@ class VesselAgentWrapper:
         self.policy = policy or GATPolicy()
 
     def select_action(
-        self, observation: VesselObservation, deterministic: bool = False
+        self,
+        observation: VesselObservation,
+        graph=None,
+        node_idx: int = None,
+        deterministic: bool = False,
     ) -> VesselAction:
-        from marlin_twin.agents.observation_builder import ObservationBuilder
-
-        obs_vec = ObservationBuilder.to_vector(observation)
-        act_arr = self.policy.act(obs_vec, deterministic=deterministic)
+        """`graph`/`node_idx` are the shared per-scene encounter graph and
+        this vessel's node index within it (built once per step by the
+        caller, which has access to every vessel's state) — only used by
+        graph-based policies (`GATPolicy`/`MeanPoolingPolicy`); other policy
+        types ignore them."""
+        act_arr = self.policy.act(observation, graph, node_idx, deterministic=deterministic)
         return self.build_action(observation, act_arr)
 
     def build_action(self, observation: VesselObservation, act_arr: np.ndarray) -> VesselAction:

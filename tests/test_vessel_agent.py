@@ -6,6 +6,7 @@ from marlin_twin.data_classes import MaritimeExperimentConfig
 from marlin_twin.envs.maritime_coord_env import MaritimeCoordEnv
 from marlin_twin.agents.vessel_agent import VesselAgentWrapper
 from marlin_twin.agents.policies import GATPolicy
+from marlin_twin.training.mappo import _build_scene_graph
 
 
 def test_vessel_agent_wrapper_build_action_applies_exact_rescale_formula():
@@ -60,5 +61,6 @@ def test_vessel_agent_wrapper_uses_default_policy_when_none_given():
     wrapper = VesselAgentWrapper(agent)
 
     assert isinstance(wrapper.policy, GATPolicy)
-    action = wrapper.select_action(obs[0], deterministic=True)
+    graph, node_idx_map = _build_scene_graph(env, obs.keys(), float(env.time_step))
+    action = wrapper.select_action(obs[0], graph, node_idx_map[0], deterministic=True)
     assert action.vessel_id == agent.vessel_id

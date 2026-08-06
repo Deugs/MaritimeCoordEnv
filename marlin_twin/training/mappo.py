@@ -9,9 +9,19 @@ from loguru import logger
 from marlin_twin.data_classes import MaritimeExperimentConfig
 from marlin_twin.api import BaseTrainer, BaseMaritimeEnvironment, Policy
 from marlin_twin.agents.policies import GATPolicy
-from marlin_twin.agents.observation_builder import ObservationBuilder
 from marlin_twin.agents.vessel_agent import VesselAgentWrapper
+from marlin_twin.envs.encounters import EncounterManager
 from marlin_twin.training.rollout_buffer import RolloutBuffer
+
+
+def _build_scene_graph(env: BaseMaritimeEnvironment, vessel_ids, timestamp: float):
+    """One shared graph per step, built from the true scene state (not each
+    vessel's own possibly-degraded observation) — every vessel's own policy
+    indexes its own node out of this same graph via `node_idx_map`."""
+    states = {vid: env.get_scene().vessels[vid].current_state for vid in vessel_ids}
+    graph = EncounterManager.build_encounter_graph(states, timestamp).to_pyg_data()
+    node_idx_map = {vid: i for i, vid in enumerate(sorted(states.keys()))}
+    return graph, node_idx_map
 
 
 class MAPPOTrainer(BaseTrainer):
@@ -31,7 +41,12 @@ class MAPPOTrainer(BaseTrainer):
 
         logger.info(f"[MAPPO] PPO training: {n_vessels} agents, {n_episodes} episodes...")
 
-        buffer = RolloutBuffer(buffer_size=self.config.episode_length, n_vessels=n_vessels)
+        sample_pol = next(iter(self.policies.values()))
+        uses_graph = getattr(sample_pol, "USES_GRAPH", False)
+        feat_dim = getattr(sample_pol, "FEAT_DIM", 6)
+        buffer = RolloutBuffer(
+            buffer_size=self.config.episode_length, n_vessels=n_vessels, feat_dim=feat_dim
+        )
 
         for ep in range(n_episodes):
             obs, info = env.reset(seed=ep)
@@ -41,29 +56,39 @@ class MAPPOTrainer(BaseTrainer):
 
             while not done:
                 actions = {}
-                obs_vecs = []
+                feat_vecs = []
                 act_vecs = []
                 val_vecs = []
                 logp_vecs = []
+                node_idx_vec = np.zeros(n_vessels, dtype=np.int64)
+
+                if uses_graph:
+                    graph, node_idx_map = _build_scene_graph(env, obs.keys(), float(env.time_step))
+                else:
+                    graph, node_idx_map = None, {}
 
                 for vid, agent_obs in obs.items():
                     pol = self.policies[vid]
                     wrapper = VesselAgentWrapper(env.get_scene().vessels[vid], pol)
+                    n_idx = node_idx_map.get(vid)
 
-                    vec = ObservationBuilder.to_vector(agent_obs)
-                    tanh_action, raw_action, val, logp = pol.get_action_and_val(vec)
+                    tanh_action, raw_action, val, logp = pol.get_action_and_val(
+                        agent_obs, graph, n_idx
+                    )
                     act = wrapper.build_action(agent_obs, tanh_action)
                     actions[vid] = act
 
-                    obs_vecs.append(vec)
+                    feat_vecs.append(pol.featurize(agent_obs))
                     act_vecs.append(raw_action)
                     val_vecs.append(val)
                     logp_vecs.append(logp)
+                    if n_idx is not None:
+                        node_idx_vec[vid] = n_idx
 
                 obs, rewards, team_reward, done, info = env.step(actions)
                 ep_reward += team_reward
 
-                obs_arr = np.array(obs_vecs, dtype=np.float32)
+                feat_arr = np.array(feat_vecs, dtype=np.float32)
                 act_arr = np.array(act_vecs, dtype=np.float32)
                 rew_arr = np.array(
                     [rewards.get(i, 0.0) for i in range(n_vessels)], dtype=np.float32
@@ -71,7 +96,15 @@ class MAPPOTrainer(BaseTrainer):
                 val_arr = np.array(val_vecs, dtype=np.float32)
                 logp_arr = np.array(logp_vecs, dtype=np.float32)
 
-                buffer.add(obs_arr, act_arr, rew_arr, val_arr, logp_arr)
+                buffer.add(
+                    feat_arr,
+                    act_arr,
+                    rew_arr,
+                    val_arr,
+                    logp_arr,
+                    graph=graph,
+                    node_idx=node_idx_vec,
+                )
 
             buffer.compute_returns_and_advantages(last_values=np.zeros(n_vessels, dtype=np.float32))
             self.reward_history.append(ep_reward)
@@ -80,7 +113,9 @@ class MAPPOTrainer(BaseTrainer):
             for vid in range(n_vessels):
                 pol = self.policies[vid]
                 if hasattr(pol, "optimizer") and hasattr(pol, "evaluate_tensors"):
-                    obs_t = torch.tensor(buffer.obs_buf[: buffer.ptr, vid], dtype=torch.float32)
+                    feat_t = torch.tensor(
+                        buffer.own_feats_buf[: buffer.ptr, vid], dtype=torch.float32
+                    )
                     act_t = torch.tensor(buffer.act_buf[: buffer.ptr, vid], dtype=torch.float32)
                     ret_t = torch.tensor(
                         buffer.ret_buf[: buffer.ptr, vid], dtype=torch.float32
@@ -92,8 +127,16 @@ class MAPPOTrainer(BaseTrainer):
                         buffer.logp_buf[: buffer.ptr, vid], dtype=torch.float32
                     ).unsqueeze(-1)
 
+                    if getattr(pol, "USES_GRAPH", False):
+                        batch, local_idx = buffer.batched_graph(vid)
+
                     for _ in range(4):  # PPO update epochs
-                        values, log_probs, entropy = pol.evaluate_tensors(obs_t, act_t)
+                        if getattr(pol, "USES_GRAPH", False):
+                            values, log_probs, entropy = pol.evaluate_tensors(
+                                feat_t, batch, local_idx, act_t
+                            )
+                        else:
+                            values, log_probs, entropy = pol.evaluate_tensors(feat_t, act_t)
                         ratios = torch.exp(log_probs - old_logp_t)
 
                         surr1 = ratios * adv_t
@@ -124,6 +167,7 @@ class MAPPOTrainer(BaseTrainer):
         env.set_communication_degradation(communication_degradation)
         total_rewards = []
         cpa_list = []
+        uses_graph = any(getattr(pol, "USES_GRAPH", False) for pol in policies.values())
 
         for ep in range(n_episodes):
             obs, info = env.reset(seed=1000 + ep)
@@ -132,10 +176,17 @@ class MAPPOTrainer(BaseTrainer):
 
             while not done:
                 actions = {}
+                if uses_graph:
+                    graph, node_idx_map = _build_scene_graph(env, obs.keys(), float(env.time_step))
+                else:
+                    graph, node_idx_map = None, {}
+
                 for vid, agent_obs in obs.items():
                     pol = policies[vid]
                     wrapper = VesselAgentWrapper(env.get_scene().vessels[vid], pol)
-                    actions[vid] = wrapper.select_action(agent_obs, deterministic=True)
+                    actions[vid] = wrapper.select_action(
+                        agent_obs, graph, node_idx_map.get(vid), deterministic=True
+                    )
 
                 obs, rewards, team_reward, done, info = env.step(actions)
                 ep_rew += team_reward
