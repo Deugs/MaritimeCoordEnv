@@ -271,7 +271,7 @@ def render_fig6_digital_twin_blackout() -> dict:
     return {"overall_rmse": result["overall_rmse"], "blackout_rmse": result["blackout_rmse"]}
 
 
-def render_fig11_ais_validation() -> dict:
+def render_fig11_real_ais_validation() -> dict:
     """Figure 11: Digital Twin validation on a simulated AIS trajectory during a 300s
     blackout. Labeled honestly -- this repo has no real-world AIS dataset (see module
     docstring), so this is NOT claimed as real-world NOAA data."""
@@ -598,7 +598,7 @@ def main():
     print(f"   {fig10_stats}")
 
     print("6. Running real simulated-AIS Digital Twin validation (Figure 11)...")
-    fig11_stats = render_fig11_ais_validation()
+    fig11_stats = render_fig11_real_ais_validation()
     print(f"   {fig11_stats}")
 
     print("=== IEEE Publication Figures Successfully Generated in ./figures/ ===")
