@@ -30,8 +30,11 @@ def main():
     )
     solver = MMGDynamicsSolver(dynamics)
 
-    print("\n1. Running Turning Circle Sea Trial (35 deg rudder)...")
-    tc_results = solver.run_turning_circle_test(rudder_angle_deg=35.0, duration=400.0)
+    # VesselDynamics.max_rudder_angle defaults to pi/6 (30 deg) and every
+    # commanded rudder angle is clamped to it, so 35.0 here would silently
+    # simulate a 30 deg turn while the label claimed 35 deg.
+    print("\n1. Running Turning Circle Sea Trial (30 deg rudder)...")
+    tc_results = solver.run_turning_circle_test(rudder_angle_deg=30.0, duration=400.0)
     print(f"   Tactical Diameter: {tc_results['tactical_diameter']:.2f} m")
     print(f"   Advance:          {tc_results['advance']:.2f} m")
     print(f"   Transfer:         {tc_results['transfer']:.2f} m")
@@ -70,7 +73,7 @@ def main():
     tc_traj = tc_results["trajectory"]
     x_tc = [s.x for s in tc_traj]
     y_tc = [s.y for s in tc_traj]
-    ax1.plot(x_tc, y_tc, "b-", label="Trajectory (35 deg Rudder)")
+    ax1.plot(x_tc, y_tc, "b-", label="Trajectory (30 deg Rudder)")
     ax1.set_title("IMO Turning Circle Maneuver", fontweight="bold")
     ax1.set_xlabel("Easting (m)")
     ax1.set_ylabel("Northing (m)")

@@ -112,7 +112,12 @@ def render_fig5_sea_trials() -> dict:
     # here). Use the same duration as scripts/phase1_validation.py for this
     # one; the zigzag needs its own much longer duration to converge (see
     # run_zigzag_test's docstring).
-    tc_result = solver.run_turning_circle_test(rudder_angle_deg=35.0, duration=400.0)
+    #
+    # rudder_angle_deg=30.0 -- VesselDynamics.max_rudder_angle defaults to
+    # pi/6 (30 deg) and MMGDynamicsSolver.step() clamps every commanded
+    # rudder angle to it, so a caller passing 35.0 here was silently
+    # simulating a 30 deg turn while every caption/label claimed 35 deg.
+    tc_result = solver.run_turning_circle_test(rudder_angle_deg=30.0, duration=400.0)
     zz_result = solver.run_zigzag_test(angle_deg=10.0, duration=6000.0)
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(7.16, 3.2))
@@ -120,7 +125,7 @@ def render_fig5_sea_trials() -> dict:
     tc_traj = tc_result["trajectory"]
     x_tc = [s.x for s in tc_traj]
     y_tc = [s.y for s in tc_traj]
-    ax1.plot(y_tc, x_tc, "b-", lw=2, label="35 deg Starboard Turning Circle")
+    ax1.plot(y_tc, x_tc, "b-", lw=2, label="30 deg Starboard Turning Circle")
     ax1.plot(y_tc[0], x_tc[0], "go", label="Start Point")
     ax1.plot(y_tc[-1], x_tc[-1], "rs", label="End Point")
     ax1.set_title("3-DOF MMG Turning Circle (IMO Standard)", fontweight="bold")

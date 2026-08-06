@@ -85,11 +85,11 @@ where $m$ is vessel displacement, $m_x, m_y, J_z$ are added masses/moment of ine
 \begin{figure}[t]
 \centering
 \includegraphics[width=0.48\textwidth]{fig5_sea_trials_ieee.pdf}
-\caption{3-DOF MMG Hydrodynamic Model Sea Trial Validation against IMO Resolution MSC.137(76) standards (35$^\circ$ Starboard Turning Circle and 10$^\circ$/10$^\circ$ Zig-Zag Maneuver).}
+\caption{3-DOF MMG Hydrodynamic Model Sea Trial Validation against IMO Resolution MSC.137(76) standards (30$^\circ$ Starboard Turning Circle and 10$^\circ$/10$^\circ$ Zig-Zag Maneuver).}
 \label{fig:sea_trials}
 \end{figure}
 
-As shown in Fig. \ref{fig:sea_trials}, the model reaches a 1st overshoot angle of 7.1$^\circ$ on the 10$^\circ$/10$^\circ$ zig-zag maneuver, within the IMO MSC.137(76) limit (25$^\circ$ for this rudder angle). The 35$^\circ$ turning circle, however, yields a tactical diameter of approximately 19.2 km -- far outside the IMO standard's 5$L$ ceiling -- reflecting that this model's hydrodynamic damping/added-mass coefficients are hand-tuned estimates rather than derived from captive-model-test data (see Section~\ref{sec:limitations}), not a validated result.
+As shown in Fig. \ref{fig:sea_trials}, the model reaches a 1st overshoot angle of 7.1$^\circ$ on the 10$^\circ$/10$^\circ$ zig-zag maneuver, within the IMO MSC.137(76) limit (25$^\circ$ for this rudder angle). The 30$^\circ$ turning circle -- the maximum rudder angle this vessel model supports, per Table~\ref{tab:hyperparams} -- however, yields a tactical diameter of approximately 19.2 km -- far outside the IMO standard's 5$L$ ceiling -- reflecting that this model's hydrodynamic damping/added-mass coefficients are hand-tuned estimates rather than derived from captive-model-test data (see Section~\ref{sec:limitations}), not a validated result.
 
 \subsection{POMDP Game Formulation}
 The multi-ASV interaction is formulated as a Partially Observable Markov Decision Process (POMDP) defined by $\langle \mathcal{N}, \mathcal{S}, \{\mathcal{A}_i\}, \{\mathcal{O}_i\}, \mathcal{P}, \mathcal{R}, \gamma \rangle$, where $\mathcal{N} = \{1, \dots, N\}$ is the set of $N=4$ vessels.
@@ -170,11 +170,11 @@ Table \ref{tab:hyperparams} details the vessel parameters and MAPPO hyperparamet
 \toprule
 \textbf{Parameter Category} & \textbf{Parameter Symbol / Name} & \textbf{Value} \\
 \midrule
-\multirow{4}{*}{3-DOF MMG Dynamics} & Vessel Length ($L$) & 38.0 m \\
- & Displacement Mass ($m$) & $2.5 \times 10^5$ kg \\
- & Added Mass ($m_x, m_y$) & $0.1m, 0.4m$ \\
- & Max Propeller RPM ($n_{\text{max}}$) & 300 RPM \\
- & Max Rudder Angle ($\delta_{\text{max}}$) & $\pm 35.0^\circ$ \\
+\multirow{5}{*}{3-DOF MMG Dynamics} & Vessel Length ($L$) & 150.0 m \\
+ & Displacement Mass ($m$) & $1.5 \times 10^7$ kg \\
+ & Added Mass ($m_x, m_y$) & $5.0 \times 10^4$ kg, $1.0 \times 10^5$ kg \\
+ & Max Propeller RPM ($n_{\text{max}}$) & 150 RPM \\
+ & Max Rudder Angle ($\delta_{\text{max}}$) & $\pm 30.0^\circ$ \\
 \midrule
 \multirow{5}{*}{MAPPO / GAT Setup} & Discount Factor ($\gamma$) & 0.99 \\
  & GAE Parameter ($\lambda_{\text{gae}}$) & 0.95 \\
@@ -260,7 +260,7 @@ Ablation 3 (No Twin) & 1.000 & 1.000 & 1.0000 \\
 Several results in this paper reflect current implementation limitations rather than validated claims, and should be read accordingly:
 
 \begin{itemize}
-    \item \textbf{Hydrodynamic coefficient realism.} The MMG added-mass/damping coefficients used throughout (Section~\ref{sec:mmg-dynamics}) are hand-tuned engineering estimates, not derived from captive-model-test data or a documented regression method such as Clarke, Gedling, and Hine's (1983) hull-form-based estimation approach. This is directly visible in Fig.~\ref{fig:sea_trials}: the 35$^\circ$ turning circle's tactical diameter ($\sim$19.2 km) is roughly 25$\times$ the IMO MSC.137(76) ceiling of $5L$, indicating the model's yaw response is far more sluggish than a real vessel of this size.
+    \item \textbf{Hydrodynamic coefficient realism.} The MMG added-mass/damping coefficients used throughout (Section~\ref{sec:mmg-dynamics}) are hand-tuned engineering estimates, not derived from captive-model-test data or a documented regression method such as Clarke, Gedling, and Hine's (1983) hull-form-based estimation approach. This is directly visible in Fig.~\ref{fig:sea_trials}: the 30$^\circ$ turning circle's tactical diameter ($\sim$19.2 km) is roughly 25$\times$ the IMO MSC.137(76) ceiling of $5L$, indicating the model's yaw response is far more sluggish than a real vessel of this size.
     \item \textbf{Resilience/safety-score metric saturation.} Every algorithm and every ablation variant we evaluated scores an identical $R_{\text{resilience}} = 1.0000$ (Figs.~\ref{fig:resilience_benchmark}, \ref{fig:ablation_study}) with zero variance across all six communication-degradation levels tested. This uniformity is far more consistent with the CPA-distance-based safety score saturating at its ceiling in this particular 2-vessel head-on scenario (i.e. vessels never close enough for the metric to register a difference) than with every method -- including an untrained rule-based controller -- achieving genuinely perfect resilience. We traced this further and found a real wiring gap in the environment: marine radar was generated every step regardless of communication-degradation level (unlike AIS, which was correctly gated), so radar silently backstopped every dropped AIS reading with a similarly accurate estimate, and delivered V2V messages were computed by the communication channel but never fed back into anything the policy could observe. Both are now fixed -- radar detection probability is tied to degradation and jamming, and delivered messages supplement the Digital Twin's state estimate -- and we confirmed via direct inspection that the Digital Twin's estimation method and error now measurably differ by degradation level (e.g. shifting from EKF/AIS updates with a few meters of error toward dead-reckoning fallback with 10-20+ meters of error as degradation increases). Despite this, the bandwidth-vs-reward sweep (Fig.~\ref{fig:bandwidth_heatmap}) still shows a bit-identical mean team reward across every degradation level for our current checkpoint, most likely because a few-to-20-meter position error is too small, relative to this scenario's vessel spacing, to change this lightly-trained (250-500 episode) policy's deterministic decision. A scenario with tighter vessel spacing, a metric with more dynamic range, and/or more extensive training under varying degradation is needed before resilience claims here can be taken as validated.
     \item \textbf{Simulated, not real-world, AIS data.} No NOAA or other real-world AIS dataset is used anywhere in this codebase; the AIS trajectory validation in Fig.~\ref{fig:real_ais} is a simulated, representative trajectory, not measured telemetry.
 \end{itemize}
