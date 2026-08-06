@@ -37,9 +37,31 @@ def main():
     print(f"   Transfer:         {tc_results['transfer']:.2f} m")
 
     print("\n2. Running 10/10 Zig-zag Sea Trial...")
-    zz_results = solver.run_zigzag_test(angle_deg=10.0, duration=300.0)
-    print(f"   First Overshoot Angle:  {zz_results['first_overshoot_angle']:.2f} deg")
-    print(f"   Second Overshoot Angle: {zz_results['second_overshoot_angle']:.2f} deg")
+    # This vessel's yaw response to a 10 deg rudder is slow (empirically
+    # confirmed to need ~5600s to complete both overshoots); a short
+    # duration here would leave the maneuver non-convergent and
+    # run_zigzag_test would honestly report None rather than a
+    # placeholder number.
+    zz_duration = 6000.0
+    zz_results = solver.run_zigzag_test(angle_deg=10.0, duration=zz_duration)
+
+    def _format_overshoot(angle: float | None, converged: bool) -> str:
+        if not converged:
+            return f"N/A (did not converge within {zz_duration:.0f}s)"
+        return f"{angle:.2f} deg"
+
+    print(
+        "   First Overshoot Angle:  "
+        + _format_overshoot(
+            zz_results["first_overshoot_angle"], zz_results["first_overshoot_converged"]
+        )
+    )
+    print(
+        "   Second Overshoot Angle: "
+        + _format_overshoot(
+            zz_results["second_overshoot_angle"], zz_results["second_overshoot_converged"]
+        )
+    )
 
     # Generate Validation Figure
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))

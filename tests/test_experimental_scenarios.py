@@ -118,6 +118,19 @@ def test_vessel_types_have_distinct_hydrodynamic_coefficients():
     assert cargo["max_speed"] != tanker["max_speed"]
 
 
+def test_tanker_matches_cited_kvlcc2_principal_dimensions():
+    """Regression guard for the KVLCC2-cited fields (see vessel_profiles.py's
+    module docstring) — catches a future edit silently drifting away from
+    the documented source without updating the citation."""
+    tanker = VESSEL_PROFILES[VesselType.TANKER]
+    assert tanker["length"] == pytest.approx(320.0)
+    assert tanker["beam"] == pytest.approx(58.0)
+    assert tanker["draft"] == pytest.approx(20.8)
+    assert tanker["max_speed"] == pytest.approx(7.97, abs=0.01)  # 15.5 kn
+    assert tanker["propeller_diameter"] == pytest.approx(9.86)  # CITED — KVLCC2 propeller diameter
+    assert tanker["rudder_area"] == pytest.approx(273.3)
+
+
 def test_tanker_is_less_yaw_responsive_than_usv():
     def yaw_rate_after(vtype, seconds=30):
         p = VESSEL_PROFILES[vtype]
