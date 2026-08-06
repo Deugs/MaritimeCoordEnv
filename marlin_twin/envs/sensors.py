@@ -9,15 +9,19 @@ class SensorSimulator:
 
     @staticmethod
     def generate_ais(
-        state: VesselState, timestamp: float, drop_prob: float = 0.05
+        state: VesselState, timestamp: float, drop_prob: float = 0.05, noise_scale: float = 1.0
     ) -> AISReading | None:
+        """`noise_scale` multiplies every noise term below the ITU-R M.1371
+        baseline — the caller derives it from visibility conditions (e.g.
+        FOG scales it up), so degraded visibility means degraded sensor
+        accuracy, not just a cosmetic label."""
         if np.random.rand() < drop_prob:
             return None  # Packet dropped
 
         # ITU-R M.1371 standard position noise ~ 5m
-        pos_noise = np.random.normal(0, 5.0, size=2)
-        heading_noise = np.random.normal(0, np.radians(0.5))
-        speed_noise = np.random.normal(0, 0.2)
+        pos_noise = np.random.normal(0, 5.0 * noise_scale, size=2)
+        heading_noise = np.random.normal(0, np.radians(0.5) * noise_scale)
+        speed_noise = np.random.normal(0, 0.2 * noise_scale)
 
         return AISReading(
             vessel_id=state.vessel_id,
@@ -29,10 +33,12 @@ class SensorSimulator:
         )
 
     @staticmethod
-    def generate_radar(state: VesselState, timestamp: float, track_id: int) -> RadarTrack:
+    def generate_radar(
+        state: VesselState, timestamp: float, track_id: int, noise_scale: float = 1.0
+    ) -> RadarTrack:
         # Marine radar position noise ~ 15m
-        pos_noise = np.random.normal(0, 15.0, size=2)
-        vel_noise = np.random.normal(0, 0.5, size=2)
+        pos_noise = np.random.normal(0, 15.0 * noise_scale, size=2)
+        vel_noise = np.random.normal(0, 0.5 * noise_scale, size=2)
 
         vel_vec = state.velocity_vector()
         return RadarTrack(

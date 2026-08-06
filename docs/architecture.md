@@ -36,5 +36,6 @@ MARLIN-Twin (**M**aritime **A**daptive **R**esilience **L**earning with **I**nte
 2. **COLREGs Engine (`marlin_twin.envs.colregs`)**: Rule checking for Rules 13 (Overtaking), 14 (Head-on), 15 (Crossing), and 17 (Stand-on action).
 3. **Digital Twin (`marlin_twin.envs.digital_twin`)**: Extended Kalman Filtering with Joint Probabilistic Data Association (JPDA).
 4. **Communication Channel (`marlin_twin.envs.communication`)**: Priority-queued bandwidth allocation.
-5. **GNN Policy Networks (`marlin_twin.agents.networks`)**: Graph Attention Networks (GAT).
-6. **2-Stage Curriculum (`marlin_twin.training.curriculum`)**: Two-phase training for multi-agent policy stability.
+5. **GNN Policy Networks (`marlin_twin.agents.networks`)**: Graph Attention Networks (GAT), run end-to-end over a shared per-timestep encounter graph — the encoder trains jointly with the actor-critic, not as a frozen feature extractor.
+6. **2-Stage Curriculum (`marlin_twin.training.curriculum`)**: Two-phase training for multi-agent policy stability, built on the on-policy `MAPPOTrainer`.
+7. **Off-Policy MADDPG (`marlin_twin.training.maddpg`)**: Decentralized deterministic actors with per-agent centralized critics and target networks, trained off-policy from a joint-transition replay buffer — an independent baseline for comparison against the on-policy MAPPO/curriculum trainers.

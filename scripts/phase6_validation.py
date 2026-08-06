@@ -10,7 +10,6 @@ Usage:
 import os
 from pathlib import Path
 
-import numpy as np
 import matplotlib.pyplot as plt
 from marlin_twin.data_classes import MaritimeExperimentConfig, VesselAction
 from marlin_twin.envs.maritime_coord_env import MaritimeCoordEnv
@@ -18,6 +17,7 @@ from marlin_twin.agents.vessel_agent import VesselAgentWrapper
 from marlin_twin.baselines.factory import BaselineFactory
 from marlin_twin.training.mappo import _build_scene_graph
 from marlin_twin.utils.metrics import compute_resilience_index
+from marlin_twin.utils.scoring import compute_safety_score
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -58,7 +58,7 @@ def main():
 
             obs, _ = env.reset(seed=42)
             done = False
-            ep_rewards = []
+            cpa_list = []
 
             while not done:
                 if uses_graph:
@@ -84,11 +84,10 @@ def main():
                         )
 
                 obs, rewards, team_reward, done, info = env.step(actions)
-                ep_rewards.append(team_reward)
+                if "min_cpa" in info:
+                    cpa_list.append(info["min_cpa"])
 
-            mean_reward = float(np.mean(ep_rewards))
-            # Shift reward into non-negative safety score J(lambda)
-            safety_score = float(np.clip((mean_reward + 100.0) / 100.0, 0.05, 1.0))
+            safety_score = compute_safety_score(cpa_list)
             sweep_results[alg].append(safety_score)
             print(f"      Lambda = {lam:.1f} -> Safety Score J(lambda): {safety_score:.3f}")
 

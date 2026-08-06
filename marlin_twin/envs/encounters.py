@@ -37,8 +37,17 @@ class EncounterManager:
         return tcpa, dcpa, dcpa
 
     @classmethod
-    def detect_encounters(cls, states: dict[int, VesselState]) -> list[Encounter]:
-        """Detect and classify encounters across all vessel pairs."""
+    def detect_encounters(
+        cls,
+        states: dict[int, VesselState],
+        max_range: float = 5556.0,
+        max_cpa: float = 1852.0,
+    ) -> list[Encounter]:
+        """Detect and classify encounters across all vessel pairs.
+
+        `max_range`/`max_cpa` are forwarded to `COLREGsEngine.classify_encounter`
+        — pass visibility-scaled values under degraded weather so restricted
+        visibility genuinely reduces/delays encounter detection."""
         encounters = []
         v_ids = list(states.keys())
         for i in range(len(v_ids)):
@@ -46,7 +55,9 @@ class EncounterManager:
                 st_i, st_j = states[v_ids[i]], states[v_ids[j]]
                 tcpa, dcpa, cpa_dist = cls.compute_cpa(st_i, st_j)
 
-                enc_type, rule = COLREGsEngine.classify_encounter(st_i, st_j, cpa_dist)
+                enc_type, rule = COLREGsEngine.classify_encounter(
+                    st_i, st_j, cpa_dist, max_range=max_range, max_cpa=max_cpa
+                )
                 if enc_type != EncounterType.NO_ENCOUNTER:
                     rel_pos = st_j.position() - st_i.position()
                     rel_bearing = float(
@@ -75,6 +86,7 @@ class EncounterManager:
         states: dict[int, VesselState],
         timestamp: float,
         include_self_loops: bool = True,
+        max_range: float = 5000.0,
     ) -> EncounterGraph:
         """Build dynamic encounter graph for GNN policy encoding.
 
@@ -84,6 +96,11 @@ class EncounterManager:
         features never contribute to its own output embedding once it has
         any real neighbors — self-loops are what let the encoder actually
         preserve a vessel's identity/own-state alongside its neighbors'.
+
+        `max_range` is the sensing/comm proximity cutoff for edges — pass a
+        visibility-scaled value under degraded weather so the policy's own
+        graph observation doesn't "see through" fog while the reward/metrics
+        (`EncounterManager.detect_encounters`) don't.
         """
         v_ids = sorted(list(states.keys()))
         n_nodes = len(v_ids)
@@ -111,7 +128,7 @@ class EncounterManager:
                     continue
                 st_i, st_j = states[v_ids[i]], states[v_ids[j]]
                 dist = np.linalg.norm(st_j.position() - st_i.position())
-                if dist < 5000.0:  # Within sensing/comm range
+                if dist < max_range:  # Within sensing/comm range
                     tcpa, dcpa, cpa_dist = cls.compute_cpa(st_i, st_j)
                     edges.append([i, j])
                     edge_feats.append(

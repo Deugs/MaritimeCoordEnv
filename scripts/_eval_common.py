@@ -3,11 +3,10 @@
 from pathlib import Path
 from typing import Callable
 
-import numpy as np
-
 from marlin_twin.data_classes import MaritimeExperimentConfig
 from marlin_twin.envs.maritime_coord_env import MaritimeCoordEnv
 from marlin_twin.training.mappo import _build_scene_graph
+from marlin_twin.utils.scoring import compute_safety_score
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -23,8 +22,12 @@ def run_degradation_sweep(
     """Evaluate a policy set across communication degradation levels.
 
     For each level, runs one episode per seed with a freshly built environment
-    and policy set, tracks the minimum inter-vessel distance observed, and
-    converts it into a safety score via ``clip(min_dist / 500.0, 0.05, 1.0)``.
+    and policy set, collects the per-step minimum CPA distance across all
+    vessel pairs (`info["min_cpa"]`, already computed by `env.step()` via
+    `EncounterManager`), and converts it into the canonical
+    `compute_safety_score` — the same formula used by every other
+    evaluator, and one that generalizes past 2 vessels (unlike the raw
+    pairwise-distance-between-the-first-two-vessels this used to track).
     Returns the per-seed safety scores for each degradation level (callers
     aggregate mean/std as needed).
 
@@ -46,7 +49,7 @@ def run_degradation_sweep(
             uses_graph = any(getattr(p, "USES_GRAPH", False) for p in policies.values())
             obs, _ = env.reset(seed=seed)
             done = False
-            min_dist = 5000.0
+            cpa_list = []
 
             while not done:
                 if uses_graph:
@@ -60,17 +63,11 @@ def run_degradation_sweep(
                         env, vid, policies[vid], agent_obs, graph, node_idx_map.get(vid)
                     )
 
-                obs, _, _, done, _ = env.step(actions)
+                obs, _, _, done, info = env.step(actions)
+                if "min_cpa" in info:
+                    cpa_list.append(info["min_cpa"])
 
-                v_ids = list(env.get_scene().vessels.keys())
-                if len(v_ids) >= 2:
-                    p1 = env.get_scene().vessels[v_ids[0]].current_state.position()
-                    p2 = env.get_scene().vessels[v_ids[1]].current_state.position()
-                    dist = float(np.linalg.norm(p1 - p2))
-                    if dist < min_dist:
-                        min_dist = dist
-
-            seed_scores.append(float(np.clip(min_dist / 500.0, 0.05, 1.0)))
+            seed_scores.append(compute_safety_score(cpa_list))
 
         scores_per_level.append(seed_scores)
 
