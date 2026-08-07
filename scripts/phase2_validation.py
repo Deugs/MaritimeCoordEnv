@@ -57,8 +57,18 @@ def main():
         else:
             jpda_errors.append(mean_err)
 
-    avg_ais_err = float(np.mean(ais_errors)) if ais_errors else 5.2
-    avg_jpda_err = float(np.mean(jpda_errors)) if jpda_errors else 14.8
+    # No placeholder fallback: if a run happens to draw zero steps into one
+    # branch (possible but unlikely over 100 steps at p=0.5 per vessel),
+    # report that honestly rather than substituting a plausible-looking
+    # fabricated number for data that was never actually measured.
+    if not ais_errors or not jpda_errors:
+        raise RuntimeError(
+            f"Simulation did not produce both AIS and AIS-loss steps to average "
+            f"(ais_errors={len(ais_errors)}, jpda_errors={len(jpda_errors)}) -- "
+            "rerun with a different seed rather than reporting a fabricated number."
+        )
+    avg_ais_err = float(np.mean(ais_errors))
+    avg_jpda_err = float(np.mean(jpda_errors))
 
     print(f"   Mean EKF Estimation Error (Full AIS): {avg_ais_err:.2f} m")
     print(f"   Mean JPDA/DR Estimation Error (AIS Loss): {avg_jpda_err:.2f} m")

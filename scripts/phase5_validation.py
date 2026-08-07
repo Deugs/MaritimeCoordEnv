@@ -52,26 +52,18 @@ def main():
     print("\n3. Generating Curriculum Learning Curve Figure...")
     fig, ax = plt.subplots(figsize=(8, 5))
 
-    episodes = np.arange(1, total_episodes + 1)
+    # Real per-episode team reward from the training run above -- trainer.reward_history
+    # accumulates across both curriculum stages (TwoStageCurriculumTrainer.train_curriculum
+    # calls self.train(), which appends every episode's reward, and never resets the list
+    # between stages), not a hand-crafted exponential-decay illustration.
+    all_rewards = np.array(trainer.reward_history[:total_episodes])
+    episodes = np.arange(1, len(all_rewards) + 1)
     stage1_cutoff = int(total_episodes * 0.6)
-
-    # Synthetic smoothed curve illustration
-    rewards_stage1 = (
-        -10.0
-        + 8.0 * (1.0 - np.exp(-episodes[:stage1_cutoff] / 30.0))
-        + np.random.normal(0, 0.5, stage1_cutoff)
-    )
-    rewards_stage2 = (
-        rewards_stage1[-1]
-        - 1.5
-        + 2.0 * (1.0 - np.exp(-episodes[stage1_cutoff:] / 20.0))
-        + np.random.normal(0, 0.5, total_episodes - stage1_cutoff)
-    )
-    all_rewards = np.concatenate([rewards_stage1, rewards_stage2])
 
     ax.plot(episodes, all_rewards, "b-", alpha=0.4, label="Raw Episode Reward")
     # Smooth moving average
-    kernel = np.ones(10) / 10.0
+    window = min(10, len(all_rewards))
+    kernel = np.ones(window) / window
     smooth_rewards = np.convolve(all_rewards, kernel, mode="same")
     ax.plot(episodes, smooth_rewards, "b-", linewidth=2.5, label="Smoothed MAPPO (Curriculum)")
 
