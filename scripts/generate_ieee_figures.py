@@ -9,7 +9,9 @@ policies -- none of the values are hand-picked placeholders. Where a figure's ti
 "real-world" data (fig11), that claim is now honest: this repository has no real NOAA/AIS
 dataset anywhere in it (confirmed by inspecting `marlin_twin/data/ais_loader.py`, which only
 ever generates a synthetic sample trajectory), so fig11 is now explicitly labeled as a
-simulated trajectory rather than falsely claiming real-world provenance.
+simulated trajectory rather than falsely claiming real-world provenance. fig3 (GAT attention)
+is a real forward pass of a trained checkpoint on a constructed-but-verified encounter scene,
+not a hand-drawn illustration with invented weights.
 
 Usage:
     python scripts/generate_ieee_figures.py
@@ -32,11 +34,14 @@ from marlin_twin.data_classes import (  # noqa: E402
     VesselState,
     AISReading,
     MaritimeExperimentConfig,
+    EncounterType,
 )
 from marlin_twin.envs.vessel_dynamics import MMGDynamicsSolver  # noqa: E402
 from marlin_twin.envs.digital_twin import DigitalTwinEstimator  # noqa: E402
 from marlin_twin.envs.communication import CommunicationChannelManager  # noqa: E402
 from marlin_twin.envs.maritime_coord_env import MaritimeCoordEnv  # noqa: E402
+from marlin_twin.envs.encounters import EncounterManager  # noqa: E402
+from marlin_twin.envs.colregs import COLREGsEngine  # noqa: E402
 from marlin_twin.agents.policies import GATPolicy  # noqa: E402
 from marlin_twin.agents.vessel_agent import VesselAgentWrapper  # noqa: E402
 from marlin_twin.baselines.independent_ppo import IndependentPPOPolicy  # noqa: E402
@@ -98,6 +103,169 @@ def _default_dynamics() -> VesselDynamics:
         max_rpm=150.0,
         propeller_diameter=4.0,
     )
+
+
+def render_fig3_gat_attention_diagram() -> dict:
+    """Figure 3: Multi-Head GAT Graph Attention Mechanism -- a real forward pass of the
+    trained checkpoint (seed 42) on a constructed 5-vessel encounter scene, not a
+    hand-drawn illustration with invented weights (the old version in
+    generate_ieee_diagrams.py hand-picked alpha=0.42/0.35/0.13/0.10 to look plausible
+    and sum to 1.00; those numbers were never computed from anything).
+
+    The scene places 4 neighbors around a common ownship, one per COLREGs encounter
+    type, and each neighbor's classification is verified live via
+    COLREGsEngine.classify_encounter rather than just trusted from the geometry, so
+    this figure can't silently drift from its own labels. Both of the checkpoint's two
+    per-vessel encoders are shown side by side rather than picking one arbitrarily:
+    they disagree with each other on this out-of-distribution (5-vessel, when this
+    checkpoint was only ever trained on 2) scene, and that disagreement is itself part
+    of the honest result, not something to average away.
+    """
+    scene = {
+        0: VesselState(vessel_id=0, x=0.0, y=0.0, heading=0.0, speed=8.0, surge_velocity=8.0),
+        1: VesselState(vessel_id=1, x=0.0, y=800.0, heading=np.pi, speed=8.0, surge_velocity=8.0),
+        2: VesselState(
+            vessel_id=2,
+            x=900.0 * np.sin(np.pi / 3),
+            y=900.0 * np.cos(np.pi / 3),
+            heading=-np.pi / 2,
+            speed=7.0,
+            surge_velocity=7.0,
+        ),
+        3: VesselState(vessel_id=3, x=0.0, y=-500.0, heading=0.0, speed=4.0, surge_velocity=4.0),
+        4: VesselState(
+            vessel_id=4,
+            x=-900.0 * np.sin(np.pi / 3),
+            y=900.0 * np.cos(np.pi / 3),
+            heading=np.pi / 2,
+            speed=7.0,
+            surge_velocity=7.0,
+        ),
+    }
+    expected_type = {
+        1: EncounterType.HEAD_ON,
+        2: EncounterType.CROSSING_GIVE_WAY,
+        3: EncounterType.OVERTAKING,
+        4: EncounterType.CROSSING_STAND_ON,
+    }
+    node_label = {
+        0: "V0",
+        1: "V1",
+        2: "V2",
+        3: "V3",
+        4: "V4",
+    }
+    edge_label = {
+        1: "Vessel 1\n(Head-on)",
+        2: "Vessel 2\n(Crossing,\ngive-way)",
+        3: "Vessel 3\n(Overtaking)",
+        4: "Vessel 4\n(Crossing,\nstand-on)",
+    }
+
+    for vid, expected in expected_type.items():
+        _, _, cpa_dist = EncounterManager.compute_cpa(scene[0], scene[vid])
+        actual, _ = COLREGsEngine.classify_encounter(scene[0], scene[vid], cpa_dist)
+        if actual != expected:
+            raise RuntimeError(
+                f"Vessel {vid}'s constructed geometry classifies as {actual}, not the "
+                f"intended {expected} -- fix the scene geometry rather than relabeling "
+                "around a mismatch."
+            )
+
+    graph = EncounterManager.build_encounter_graph(scene, timestamp=0.0)
+    data = graph.to_pyg_data()
+
+    ckpt_path = os.path.join(REPO_ROOT, "checkpoints", "marlin_twin_seed_42.pt")
+    if not os.path.exists(ckpt_path):
+        raise FileNotFoundError(
+            f"{ckpt_path} is required to compute real GAT attention weights for this "
+            "figure -- run scripts/run_retrain_all_baselines.py first. (Unlike fig8/"
+            "fig9, this figure does not fall back to an untrained encoder on a missing "
+            "checkpoint: a silent fallback here would just reintroduce fabricated "
+            "numbers under a different mechanism.)"
+        )
+    ckpt = torch.load(ckpt_path, weights_only=True)
+
+    src, dst = data.edge_index[0], data.edge_index[1]
+    weights_by_vessel = {}
+    for vessel_index in (0, 1):
+        policy = GATPolicy()
+        policy.set_state(ckpt[vessel_index])
+        with torch.no_grad():
+            _, alpha = policy.encoder(
+                data.x, data.edge_index, data.edge_attr, return_attention=True
+            )
+        alpha_mean = alpha.mean(dim=1)  # mean across the K=4 attention heads
+
+        weights = {}
+        for e in (dst == 0).nonzero(as_tuple=True)[0]:
+            weights[int(src[e].item())] = float(alpha_mean[e].item())
+        total = sum(weights.values())
+        assert abs(total - 1.0) < 1e-4, f"attention into node 0 sums to {total}, not 1.0"
+        weights_by_vessel[vessel_index] = weights
+
+    node_pos = {0: (0.5, 0.5), 1: (0.5, 0.88), 2: (0.87, 0.30), 3: (0.5, 0.12), 4: (0.13, 0.30)}
+
+    fig, axes = plt.subplots(1, 2, figsize=(7.16, 3.6))
+    for ax, vessel_index in zip(axes, (0, 1)):
+        ax.axis("off")
+        w = weights_by_vessel[vessel_index]
+        for n, (x, y) in node_pos.items():
+            col = "#1f77b4" if n == 0 else "#aec7e8"
+            circle = plt.Circle((x, y), 0.085, color=col, ec="#003366", lw=1.6, zorder=3)
+            ax.add_patch(circle)
+            ax.text(
+                x,
+                y,
+                node_label[n],
+                ha="center",
+                va="center",
+                fontsize=7.5,
+                fontweight="bold",
+                color="white" if n == 0 else "black",
+                zorder=4,
+            )
+        x0, y0 = node_pos[0]
+        for n in (1, 2, 3, 4):
+            x1, y1 = node_pos[n]
+            ax.plot([x0, x1], [y0, y1], "k--", lw=1.2, alpha=0.6, zorder=1)
+            mx, my = (x0 + x1) / 2, (y0 + y1) / 2
+            ax.text(
+                mx,
+                my,
+                f"{edge_label[n]}\n" + r"$\alpha=$" + f"{w[n]:.3f}",
+                fontsize=6.0,
+                ha="center",
+                va="center",
+                bbox=dict(boxstyle="round,pad=0.15", fc="white", ec="gray", alpha=0.9),
+                zorder=2,
+            )
+        ax.text(
+            x0,
+            -0.06,
+            "ownship self-retention\n" + r"$\alpha=$" + f"{w[0]:.3f}",
+            fontsize=6.0,
+            ha="center",
+            va="top",
+            style="italic",
+        )
+        ax.set_title(f"Vessel {vessel_index}'s Encoder", fontweight="bold", fontsize=9)
+        ax.set_xlim(-0.02, 1.02)
+        ax.set_ylim(-0.16, 1.05)
+
+    fig.suptitle(
+        "Real GAT Attention (mean of $K=4$ heads), Trained Checkpoint on a "
+        "Constructed 5-Vessel Scene",
+        fontweight="bold",
+        fontsize=9.5,
+    )
+    plt.tight_layout()
+    save_fig_all_formats("fig3_gat_attention_diagram_ieee")
+
+    return {
+        "vessel_0_weights": weights_by_vessel[0],
+        "vessel_1_weights": weights_by_vessel[1],
+    }
 
 
 def render_fig5_sea_trials() -> dict:
@@ -592,27 +760,31 @@ def main():
     print("=== Re-rendering IEEE Publication Figures (300 DPI) from Real Simulation Data ===")
     setup_ieee_style()
 
-    print("1. Running real 3-DOF MMG Sea Trial Maneuvers (Figure 5)...")
+    print("1. Running real GAT attention forward pass on trained checkpoint (Figure 3)...")
+    fig3_stats = render_fig3_gat_attention_diagram()
+    print(f"   {fig3_stats}")
+
+    print("2. Running real 3-DOF MMG Sea Trial Maneuvers (Figure 5)...")
     fig5_stats = render_fig5_sea_trials()
     print(f"   {fig5_stats}")
 
-    print("2. Running real Digital Twin EKF Blackout Tracking (Figure 6)...")
+    print("3. Running real Digital Twin EKF Blackout Tracking (Figure 6)...")
     fig6_stats = render_fig6_digital_twin_blackout()
     print(f"   {fig6_stats}")
 
-    print("3. Running real Bandwidth Utilization sweep (Figure 8)...")
+    print("4. Running real Bandwidth Utilization sweep (Figure 8)...")
     fig8_stats = render_fig8_degradation_heatmap()
     print(f"   {fig8_stats}")
 
-    print("4. Running real Resilience Index Comparison sweep (Figure 9)...")
+    print("5. Running real Resilience Index Comparison sweep (Figure 9)...")
     fig9_stats = render_fig9_benchmark_resilience()
     print(f"   {fig9_stats}")
 
-    print("5. Running real Extended Training Curves (Figure 10)...")
+    print("6. Running real Extended Training Curves (Figure 10)...")
     fig10_stats = render_fig10_extended_training()
     print(f"   {fig10_stats}")
 
-    print("6. Running real simulated-AIS Digital Twin validation (Figure 11)...")
+    print("7. Running real simulated-AIS Digital Twin validation (Figure 11)...")
     fig11_stats = render_fig11_real_ais_validation()
     print(f"   {fig11_stats}")
 
