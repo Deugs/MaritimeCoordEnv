@@ -30,9 +30,11 @@ def test_turning_circle_sea_trial():
 
 def test_zigzag_sea_trial():
     # A CARGO-scale vessel's yaw response to a 10 deg rudder is slow
-    # (empirically confirmed to need ~5600s to complete both overshoots
-    # at this duration/dt); USV converges well within 900s, keeping this
-    # test fast while still exercising a real completed maneuver.
+    # (empirically confirmed to need ~19700s to complete both overshoots
+    # at this duration/dt after fixing the double-RPM-scaling thrust bug,
+    # see VesselDynamics.thrust_coefficient); USV converges within ~8000s
+    # with its own correctly-calibrated thrust_coefficient, keeping this
+    # test faster while still exercising a real completed maneuver.
     usv_profile = VESSEL_PROFILES[VesselType.USV]
     dynamics = VesselDynamics(
         vessel_id=0,
@@ -48,6 +50,7 @@ def test_zigzag_sea_trial():
         max_rpm=usv_profile["max_rpm"],
         rudder_area=usv_profile["rudder_area"],
         propeller_diameter=usv_profile["propeller_diameter"],
+        thrust_coefficient=usv_profile["thrust_coefficient"],
     )
     solver = MMGDynamicsSolver(dynamics)
     initial_state = VesselState(
@@ -58,7 +61,7 @@ def test_zigzag_sea_trial():
         speed=usv_profile["max_speed"],
         surge_velocity=usv_profile["max_speed"],
     )
-    result = solver.run_zigzag_test(initial_state=initial_state, angle_deg=10.0, duration=900.0)
+    result = solver.run_zigzag_test(initial_state=initial_state, angle_deg=10.0, duration=8000.0)
 
     assert result["first_overshoot_converged"] is True
     assert result["second_overshoot_converged"] is True

@@ -22,12 +22,22 @@ def run_degradation_sweep(
     """Evaluate a policy set across communication degradation levels.
 
     For each level, runs one episode per seed with a freshly built environment
-    and policy set, collects the per-step minimum CPA distance across all
-    vessel pairs (`info["min_cpa"]`, already computed by `env.step()` via
-    `EncounterManager`), and converts it into the canonical
-    `compute_safety_score` — the same formula used by every other
-    evaluator, and one that generalizes past 2 vessels (unlike the raw
-    pairwise-distance-between-the-first-two-vessels this used to track).
+    and policy set, reduces the episode to its true minimum pairwise vessel
+    separation (`info["true_min_pairwise_distance"]`, the real Euclidean
+    distance between every vessel pair's actual position each step -- not
+    `info["min_cpa"]`, which is a per-step *projected* CPA from a linear
+    velocity extrapolation and reads near-zero in the instant just before a
+    rudder command actually changes heading, regardless of how safe the
+    real, curving trajectory turns out to be), and converts that single
+    per-episode value into the canonical `compute_safety_score` — the same
+    formula used by every other evaluator, and one that generalizes past 2
+    vessels (unlike the raw pairwise-distance-between-the-first-two-vessels
+    this used to track). `compute_safety_score`'s own docstring calls for
+    one real per-episode value, not a per-step time series -- averaging
+    every step (including the many steps with no nearby vessel, which
+    default to 5000m) into one number dilutes a real close encounter into
+    insignificance, which is what made every degradation level look
+    identically "safe" regardless of the actual encounter outcome.
     Returns the per-seed safety scores for each degradation level (callers
     aggregate mean/std as needed).
 
@@ -49,7 +59,7 @@ def run_degradation_sweep(
             uses_graph = any(getattr(p, "USES_GRAPH", False) for p in policies.values())
             obs, _ = env.reset(seed=seed)
             done = False
-            cpa_list = []
+            episode_min_distance = 5000.0
 
             while not done:
                 if uses_graph:
@@ -64,10 +74,12 @@ def run_degradation_sweep(
                     )
 
                 obs, _, _, done, info = env.step(actions)
-                if "min_cpa" in info:
-                    cpa_list.append(info["min_cpa"])
+                if "true_min_pairwise_distance" in info:
+                    episode_min_distance = min(
+                        episode_min_distance, info["true_min_pairwise_distance"]
+                    )
 
-            seed_scores.append(compute_safety_score(cpa_list))
+            seed_scores.append(compute_safety_score([episode_min_distance]))
 
         scores_per_level.append(seed_scores)
 

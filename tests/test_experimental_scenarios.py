@@ -102,9 +102,14 @@ def test_crossing_alias_matches_crossing_give_way_exactly():
 
 
 def test_head_on_two_vessel_geometry_unchanged_from_before_generalization():
+    # Separation is intentionally 800m/side (1600m gap), not the original
+    # 2000m/side -- see scenarios.py's head_on branch for why: the original
+    # 4000m gap left no real post-avoidance-decision time within an
+    # RL-episode-length window once VesselDynamics' yaw response was fixed
+    # to be physically realistic (see thrust_coefficient/yaw_coefficient).
     agents = ScenarioGenerator.create_scenario("head_on", 2, seed=1)
-    assert (agents[0].current_state.x, agents[0].current_state.y) == (0.0, -2000.0)
-    assert (agents[1].current_state.x, agents[1].current_state.y) == (0.0, 2000.0)
+    assert (agents[0].current_state.x, agents[0].current_state.y) == (0.0, -800.0)
+    assert (agents[1].current_state.x, agents[1].current_state.y) == (0.0, 800.0)
 
 
 # --- Part 3: real per-VesselType heterogeneity -------------------------------

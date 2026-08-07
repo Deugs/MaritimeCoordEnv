@@ -34,8 +34,20 @@ class SensorSimulator:
 
     @staticmethod
     def generate_radar(
-        state: VesselState, timestamp: float, track_id: int, noise_scale: float = 1.0
-    ) -> RadarTrack:
+        state: VesselState,
+        timestamp: float,
+        track_id: int,
+        noise_scale: float = 1.0,
+        drop_prob: float = 0.0,
+    ) -> RadarTrack | None:
+        """`drop_prob` models missed detections. Unlike AIS, radar is a
+        self-contained onboard sensor, so under ordinary communication
+        degradation this should stay much smaller than AIS's `drop_prob` --
+        the caller only pushes it high for a vessel actively inside a
+        jamming zone (broadband RF jamming can plausibly blind radar too)."""
+        if np.random.rand() < drop_prob:
+            return None  # Missed detection
+
         # Marine radar position noise ~ 15m
         pos_noise = np.random.normal(0, 15.0 * noise_scale, size=2)
         vel_noise = np.random.normal(0, 0.5 * noise_scale, size=2)

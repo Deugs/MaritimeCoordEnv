@@ -166,10 +166,28 @@ class VesselDynamics:
     # Propeller
     propeller_diameter: float = 4.0  # m
     max_rpm: float = 150.0
+    # Thrust-formula scale (`thrust = (n_rps**2) * (propeller_diameter**4) *
+    # thrust_coefficient`). Default of 90.0 is derived, not guessed: it's the
+    # value that makes CARGO's own mass/drag/rpm/propeller-diameter combination
+    # reach exactly CARGO's declared max_speed (12.0 m/s) at full throttle. A
+    # single global constant can't hit every vessel type's own max_speed
+    # exactly (their thrust/drag ratios differ), so `vessel_profiles.py`
+    # derives a per-type value with the same formula rather than reusing this
+    # default for every type.
+    thrust_coefficient: float = 90.0
 
     # Rudder
     rudder_area: float = 20.0  # m^2
     max_rudder_angle: float = np.pi / 6  # 30 degrees
+    # Yaw-moment-formula scale (`N += rudder_angle * rudder_area * u**2 *
+    # yaw_coefficient`). Default of 24.868 is derived the same way as
+    # `thrust_coefficient`: it's the value that makes CARGO's own N_r_dot/
+    # rudder_area/max_speed combination reach a steady turning radius of
+    # roughly half its declared `turning_circle` (200m) at 80%-throttle
+    # cruise speed and full 30-degree rudder. Like `thrust_coefficient`, a
+    # single global value can't hit every type's own turning_circle, so
+    # `vessel_profiles.py` derives a per-type value.
+    yaw_coefficient: float = 24.868
 
     def compute_derivatives(
         self, state: VesselState, propeller_rpm: float, rudder_angle: float
@@ -182,7 +200,7 @@ class VesselDynamics:
         # Surge equation (MMG added mass & propeller thrust)
         effective_mass = max(self.mass - self.X_u_dot, 1.0)
         n_rps = (propeller_rpm * self.max_rpm) / 60.0
-        thrust = (n_rps**2) * (self.propeller_diameter**4) * 0.05
+        thrust = (n_rps**2) * (self.propeller_diameter**4) * self.thrust_coefficient
         drag = self.X_u * u * abs(u)
         du = (thrust + drag) / effective_mass
 
@@ -191,7 +209,11 @@ class VesselDynamics:
         dv = Y / max(self.mass - self.Y_v_dot, 1.0)
 
         # Yaw equation
-        N = self.N_r_dot * r + self.N_r * r * abs(r) + rudder_angle * self.rudder_area * u * u * 0.3
+        N = (
+            self.N_r_dot * r
+            + self.N_r * r * abs(r)
+            + rudder_angle * self.rudder_area * u * u * self.yaw_coefficient
+        )
         dr = N / max(self.moment_of_inertia, 1.0)
 
         # Kinematics (Nautical Convention: 0=North/+Y, pi/2=East/+X)

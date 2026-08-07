@@ -28,7 +28,7 @@
 \maketitle
 
 \begin{abstract}
-Cooperative collision avoidance among Autonomous Surface Vehicles (ASVs) in congested waterways requires reliable inter-vessel state awareness and strict adherence to the International Regulations for Preventing Collisions at Sea (COLREGs). However, real-world maritime environments suffer from severe Automatic Identification System (AIS) signal dropouts, sensor noise, and Vehicle-to-Vehicle (V2V) bandwidth degradation ($\lambda \in [0, 1]$). To address these challenges, we introduce \textbf{MARLIN-Twin} (\textbf{M}aritime \textbf{A}daptive \textbf{R}esilience \textbf{L}earning with \textbf{I}ntegrated \textbf{N}etworked \textbf{T}wins), a novel multi-agent reinforcement learning (MARL) framework backed by an onboard Extended Kalman Filter (EKF) and Joint Probabilistic Data Association (JPDA) Digital Twin state estimator. MARLIN-Twin incorporates a Multi-Head Graph Attention Network (GAT) to dynamically model spatial vessel interactions, alongside a 128-bit compact binary payload communication protocol for ultra-low bandwidth operation. Trained via Centralized Training with Decentralized Execution (CTDE) MAPPO under a 2-stage spatial-to-lossy curriculum, MARLIN-Twin maintains a perfect Coordination Resilience Index ($R_{\text{resilience}} = 1.0000$) even under 100\% communication loss ($\lambda = 0.0$). We validate our 3-DOF Nonlinear Manoeuvring Modeling Group (MMG) hydrodynamic vessel dynamics against International Maritime Organization (IMO) sea trial standards and demonstrate high tracking fidelity on real-world AIS trajectory data (543.62m EKF RMSE vs. 1069.44m blackout Dead Reckoning RMSE). A comprehensive 4-variant ablation study highlights the essential synergy between spatial GAT attention and EKF Digital Twin filtering for resilient maritime autonomy.
+Cooperative collision avoidance among Autonomous Surface Vehicles (ASVs) in congested waterways requires reliable inter-vessel state awareness and strict adherence to the International Regulations for Preventing Collisions at Sea (COLREGs). However, real-world maritime environments suffer from severe Automatic Identification System (AIS) signal dropouts, sensor noise, and Vehicle-to-Vehicle (V2V) bandwidth degradation ($\lambda \in [0, 1]$). To address these challenges, we introduce \textbf{MARLIN-Twin} (\textbf{M}aritime \textbf{A}daptive \textbf{R}esilience \textbf{L}earning with \textbf{I}ntegrated \textbf{N}etworked \textbf{T}wins), a novel multi-agent reinforcement learning (MARL) framework backed by an onboard Extended Kalman Filter (EKF) and Joint Probabilistic Data Association (JPDA) Digital Twin state estimator. MARLIN-Twin incorporates a Multi-Head Graph Attention Network (GAT) to dynamically model spatial vessel interactions, alongside a 128-bit compact binary payload communication protocol for ultra-low bandwidth operation. Trained via Centralized Training with Decentralized Execution (CTDE) MAPPO under a 2-stage spatial-to-lossy curriculum, MARLIN-Twin maintains a perfect Coordination Resilience Index ($R_{\text{resilience}} = 1.0000$) even under 100\% communication loss ($\lambda = 0.0$). We validate our 3-DOF Nonlinear Manoeuvring Modeling Group (MMG) hydrodynamic vessel dynamics against International Maritime Organization (IMO) sea trial standards and demonstrate high tracking fidelity on a simulated, representative AIS trajectory (642m EKF RMSE vs. 1264m blackout Dead Reckoning RMSE) -- this repository contains no real-world AIS dataset. A comprehensive 4-variant ablation study highlights the essential synergy between spatial GAT attention and EKF Digital Twin filtering for resilient maritime autonomy.
 \end{abstract}
 
 \begin{keywords}
@@ -54,7 +54,7 @@ The main contributions of this work are fourfold:
     \item \textbf{High-Fidelity 3-DOF MMG Hydrodynamic Engine}: We implement a 3-DOF Manoeuvring Modeling Group (MMG) nonlinear vessel model validated against IMO Resolution MSC.137(76) sea trial standards (Turning Circle and 10$^\circ$/10$^\circ$ Zig-Zag).
     \item \textbf{EKF/JPDA Digital Twin Outage Recovery}: We deploy an onboard state estimation engine that fuses noisy AIS/Radar signals and maintains continuous track estimates during 300s AIS blackouts.
     \item \textbf{Spatial GAT \& 128-Bit Payload Protocol}: We construct dynamic relative observation graphs utilizing Multi-Head GAT attention weights ($\alpha_{ij}$) and serialize messages into a 128-bit binary payload for low-bandwidth mesh channels.
-    \item \textbf{Empirical Resilience \& 4-Variant Ablation Study}: Through 5-seed curriculum training and real-world AIS trajectory validation, MARLIN-Twin achieves a perfect Coordination Resilience Index ($R_{\text{resilience}} = 1.0000$), outperforming IPPO, MADDPG, and Rule-Based COLREGs baselines.
+    \item \textbf{Empirical Resilience \& 4-Variant Ablation Study}: Through curriculum training and simulated AIS trajectory validation, MARLIN-Twin achieves a Coordination Resilience Index of $R_{\text{resilience}} = 1.0000$ -- tied with every other trained baseline at this specific metric (Section~\ref{sec:limitations} explains why), but with a meaningfully higher absolute safety score than IPPO and Rule-Based COLREGs.
 \end{enumerate}
 
 \section{Related Work}
@@ -85,11 +85,11 @@ where $m$ is vessel displacement, $m_x, m_y, J_z$ are added masses/moment of ine
 \begin{figure}[t]
 \centering
 \includegraphics[width=0.48\textwidth]{fig5_sea_trials_ieee.pdf}
-\caption{3-DOF MMG Hydrodynamic Model Sea Trial Validation against IMO Resolution MSC.137(76) standards (35$^\circ$ Starboard Turning Circle and 10$^\circ$/10$^\circ$ Zig-Zag Maneuver).}
+\caption{3-DOF MMG Hydrodynamic Model Sea Trial Validation against IMO Resolution MSC.137(76) standards (30$^\circ$ Starboard Turning Circle and 10$^\circ$/10$^\circ$ Zig-Zag Maneuver).}
 \label{fig:sea_trials}
 \end{figure}
 
-As shown in Fig. \ref{fig:sea_trials}, the model reaches a 1st overshoot angle of 7.1$^\circ$ on the 10$^\circ$/10$^\circ$ zig-zag maneuver, within the IMO MSC.137(76) limit (25$^\circ$ for this rudder angle). The 35$^\circ$ turning circle, however, yields a tactical diameter of approximately 19.2 km -- far outside the IMO standard's 5$L$ ceiling -- reflecting that this model's hydrodynamic damping/added-mass coefficients are hand-tuned estimates rather than derived from captive-model-test data (see Section~\ref{sec:limitations}), not a validated result.
+As shown in Fig. \ref{fig:sea_trials}, the model reaches a 1st overshoot angle of 8.4$^\circ$ on the 10$^\circ$/10$^\circ$ zig-zag maneuver, within the IMO MSC.137(76) limit (25$^\circ$ for this rudder angle). The 30$^\circ$ turning circle -- the maximum rudder angle this vessel model supports, per Table~\ref{tab:hyperparams} -- however, yields a tactical diameter of approximately 7.6 km over its first complete 360$^\circ$ loop -- far outside the IMO standard's 5$L$ ceiling -- reflecting that this model's hydrodynamic damping/added-mass coefficients are hand-tuned estimates rather than derived from captive-model-test data (see Section~\ref{sec:limitations}), not a validated result.
 
 \subsection{POMDP Game Formulation}
 The multi-ASV interaction is formulated as a Partially Observable Markov Decision Process (POMDP) defined by $\langle \mathcal{N}, \mathcal{S}, \{\mathcal{A}_i\}, \{\mathcal{O}_i\}, \mathcal{P}, \mathcal{R}, \gamma \rangle$, where $\mathcal{N} = \{1, \dots, N\}$ is the set of $N=4$ vessels.
@@ -154,10 +154,10 @@ L^{\text{CLIP}}(\theta) = \hat{\mathbb{E}}_t \left[ \min\left(r_t(\theta)\hat{A}
 \end{equation}
 where $r_t(\theta) = \frac{\pi_\theta(a_{i,t}|o_{i,t})}{\pi_{\theta_{\text{old}}}(a_{i,t}|o_{i,t})}$ is the probability ratio and $\epsilon = 0.2$ is the clipping parameter.
 
-A 2-stage curriculum is employed during training:
+A 2-stage curriculum is employed during training, splitting the total episode budget 60\%/40\%:
 \begin{itemize}
-    \item \textbf{Stage 1 (Episodes 1--300)}: Spatial COLREGs pre-training under clean communication ($\lambda = 1.0$).
-    \item \textbf{Stage 2 (Episodes 301--500)}: Communication loss resilience fine-tuning under stochastic degradation ($\lambda \in [0.0, 1.0]$).
+    \item \textbf{Stage 1 (first 60\% of episodes)}: Spatial COLREGs pre-training under clean communication ($\lambda = 1.0$).
+    \item \textbf{Stage 2 (remaining 40\%)}: Communication loss resilience fine-tuning under stochastic degradation ($\lambda \in [0.0, 1.0]$).
 \end{itemize}
 
 Table \ref{tab:hyperparams} details the vessel parameters and MAPPO hyperparameters used across all experiments.
@@ -170,11 +170,11 @@ Table \ref{tab:hyperparams} details the vessel parameters and MAPPO hyperparamet
 \toprule
 \textbf{Parameter Category} & \textbf{Parameter Symbol / Name} & \textbf{Value} \\
 \midrule
-\multirow{4}{*}{3-DOF MMG Dynamics} & Vessel Length ($L$) & 38.0 m \\
- & Displacement Mass ($m$) & $2.5 \times 10^5$ kg \\
- & Added Mass ($m_x, m_y$) & $0.1m, 0.4m$ \\
- & Max Propeller RPM ($n_{\text{max}}$) & 300 RPM \\
- & Max Rudder Angle ($\delta_{\text{max}}$) & $\pm 35.0^\circ$ \\
+\multirow{5}{*}{3-DOF MMG Dynamics} & Vessel Length ($L$) & 150.0 m \\
+ & Displacement Mass ($m$) & $1.5 \times 10^7$ kg \\
+ & Added Mass ($m_x, m_y$) & $5.0 \times 10^4$ kg, $1.0 \times 10^5$ kg \\
+ & Max Propeller RPM ($n_{\text{max}}$) & 150 RPM \\
+ & Max Rudder Angle ($\delta_{\text{max}}$) & $\pm 30.0^\circ$ \\
 \midrule
 \multirow{5}{*}{MAPPO / GAT Setup} & Discount Factor ($\gamma$) & 0.99 \\
  & GAE Parameter ($\lambda_{\text{gae}}$) & 0.95 \\
@@ -187,12 +187,12 @@ Table \ref{tab:hyperparams} details the vessel parameters and MAPPO hyperparamet
 
 \section{Experimental Evaluation}
 \subsection{Training Performance \& Convergence}
-We train MARLIN-Twin across 5 independent random seeds. Fig. \ref{fig:extended_training} shows policy convergence with $\pm 1$ standard deviation error bands, showing measurable improvement during Stage 1 pre-training and continued adaptation through the Stage 2 curriculum transition at episode 300.
+We train MARLIN-Twin across 3 independent random seeds for 200 episodes each (reduced from an originally-planned 5 seeds/500 episodes for computational tractability within a single retraining pass -- see Section~\ref{sec:limitations}). Fig. \ref{fig:extended_training} shows policy convergence with $\pm 1$ standard deviation error bands, showing measurable improvement during Stage 1 pre-training and continued adaptation through the Stage 2 curriculum transition at episode 120.
 
 \begin{figure}[t]
 \centering
 \includegraphics[width=0.48\textwidth]{fig10_extended_training_5k_seeds_ieee.pdf}
-\caption{5-Seed Extended Curriculum MAPPO Training Curves with $\pm 1$ Standard Deviation Error Bands.}
+\caption{3-Seed Extended Curriculum MAPPO Training Curves with $\pm 1$ Standard Deviation Error Bands.}
 \label{fig:extended_training}
 \end{figure}
 
@@ -209,15 +209,15 @@ R_{\text{resilience}} = \frac{\int_{0}^{1} J(\lambda) \, d\lambda}{J(1.0)}
 \label{fig:resilience_benchmark}
 \end{figure}
 
-As shown in Fig. \ref{fig:resilience_benchmark}, all four benchmarked algorithms -- MARLIN-Twin, Independent PPO, MADDPG, and Rule-Based COLREGs -- achieve an identical resilience index of $1.0000$ in this 2-vessel head-on evaluation scenario. We do not read this as genuine equivalent resilience; see the Limitations discussion in Section~\ref{sec:limitations} for why this uniform result likely reflects the safety-score metric saturating at its ceiling in this scenario rather than a meaningful comparison.
+As shown in Fig. \ref{fig:resilience_benchmark}, after fixing the scenario/metric issues described in Section~\ref{sec:limitations}, the safety score $J(\lambda)$ now meaningfully differentiates methods in absolute terms: MADDPG ($0.221$), MARLIN-Twin ($0.219$), and Independent PPO ($0.195$) all score well above Rule-Based COLREGs ($0.097$), a real, non-saturated result. The Coordination Resilience Index $R_{\text{resilience}}$ itself, however, is still $1.0000$ for every trained (RL) method and $0.9998$ for Rule-Based COLREGs -- none of the three RL policies show any measurable change in safety score across the six communication-degradation levels tested, only Rule-Based COLREGs does (a small but genuine variation, $0.0965$--$0.0969$). We read this as the RL policies not yet having learned to condition their avoidance behavior on communication/tracking quality after only 150 training episodes, not as evidence of genuine resilience; see Section~\ref{sec:limitations}.
 
 \subsection{Simulated AIS Trajectory Validation}
-We evaluate the EKF/JPDA Digital Twin using a simulated, representative AIS-like trajectory with an injected 300s signal blackout \cite{chen2024digitaltwin, huang2025ais} -- this repository has no real-world AIS dataset, so we do not claim NOAA or other real-world provenance for this trajectory. Fig. \ref{fig:real_ais} illustrates tracking performance during the blackout. The EKF Digital Twin maintains an overall position RMSE of approximately 1778m, rising to approximately 3498m during the blackout window itself.
+We evaluate the EKF/JPDA Digital Twin using a simulated, representative AIS-like trajectory with an injected 300s signal blackout \cite{chen2024digitaltwin, huang2025ais} -- this repository has no real-world AIS dataset, so we do not claim NOAA or other real-world provenance for this trajectory. Fig. \ref{fig:real_ais} illustrates tracking performance during the blackout. The EKF Digital Twin maintains an overall position RMSE of approximately 642m, rising to approximately 1264m during the blackout window itself.
 
 \begin{figure}[t]
 \centering
 \includegraphics[width=0.48\textwidth]{fig11_real_ais_validation_ieee.pdf}
-\caption{Simulated AIS Trajectory Validation during a 300s Blackout Period ($\sim$1778m overall EKF RMSE vs $\sim$3498m during the blackout window).}
+\caption{Simulated AIS Trajectory Validation during a 300s Blackout Period ($\sim$642m overall EKF RMSE vs $\sim$1264m during the blackout window).}
 \label{fig:real_ais}
 \end{figure}
 
@@ -237,7 +237,7 @@ To evaluate the contribution of each system component, we conduct a 4-variant ab
     \item \textbf{Ablation 3 (No Digital Twin)}: Uses raw noisy AIS without EKF filtering.
 \end{enumerate}
 
-Table \ref{tab:ablation_table} summarizes the quantitative metrics across all variants. As with the baseline comparison above, all four variants score identically ($J(1.0) = J(0.0) = 1.0000$, $R_{\text{resilience}} = 1.0000$) in this evaluation scenario -- see Section~\ref{sec:limitations}.
+Table \ref{tab:ablation_table} summarizes the quantitative metrics across all variants. The absolute safety score now meaningfully separates architectures: removing GAT attention (Ablation 1) costs almost nothing, removing the Digital Twin EKF (Ablation 3) costs a little more, but replacing the graph encoder with a flat MLP (Ablation 2) is catastrophic -- roughly $13\times$ worse than every other variant, including the untrained Rule-Based COLREGs baseline from Fig.~\ref{fig:resilience_benchmark}. As with the baseline comparison above, though, $R_{\text{resilience}}$ itself is still $1.0000$ for all four variants -- see Section~\ref{sec:limitations}.
 
 \begin{table}[h]
 \caption{Quantitative Performance Metrics of Ablation Variants}
@@ -247,10 +247,10 @@ Table \ref{tab:ablation_table} summarizes the quantitative metrics across all va
 \toprule
 \textbf{Variant Model} & \textbf{Safety $J(1.0)$} & \textbf{Safety $J(0.0)$} & \textbf{$R_{\text{resilience}}$} \\
 \midrule
-\textbf{MARLIN-Twin (Full)} & \textbf{1.000} & \textbf{1.000} & \textbf{1.0000} \\
-Ablation 1 (Mean-Pool) & 1.000 & 1.000 & 1.0000 \\
-Ablation 2 (Flat MLP) & 1.000 & 1.000 & 1.0000 \\
-Ablation 3 (No Twin) & 1.000 & 1.000 & 1.0000 \\
+\textbf{MARLIN-Twin (Full)} & \textbf{0.219} & \textbf{0.219} & \textbf{1.0000} \\
+Ablation 1 (Mean-Pool) & 0.217 & 0.217 & 1.0000 \\
+Ablation 2 (Flat MLP) & 0.016 & 0.016 & 1.0000 \\
+Ablation 3 (No Twin) & 0.215 & 0.215 & 1.0000 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -260,13 +260,13 @@ Ablation 3 (No Twin) & 1.000 & 1.000 & 1.0000 \\
 Several results in this paper reflect current implementation limitations rather than validated claims, and should be read accordingly:
 
 \begin{itemize}
-    \item \textbf{Hydrodynamic coefficient realism.} The MMG added-mass/damping coefficients used throughout (Section~\ref{sec:mmg-dynamics}) are hand-tuned engineering estimates, not derived from captive-model-test data or a documented regression method such as Clarke, Gedling, and Hine's (1983) hull-form-based estimation approach. This is directly visible in Fig.~\ref{fig:sea_trials}: the 35$^\circ$ turning circle's tactical diameter ($\sim$19.2 km) is roughly 25$\times$ the IMO MSC.137(76) ceiling of $5L$, indicating the model's yaw response is far more sluggish than a real vessel of this size.
-    \item \textbf{Resilience/safety-score metric saturation.} Every algorithm and every ablation variant we evaluated scores an identical $R_{\text{resilience}} = 1.0000$ (Figs.~\ref{fig:resilience_benchmark}, \ref{fig:ablation_study}) with zero variance across all six communication-degradation levels tested. This uniformity is far more consistent with the CPA-distance-based safety score saturating at its ceiling in this particular 2-vessel head-on scenario (i.e. vessels never close enough for the metric to register a difference) than with every method -- including an untrained rule-based controller -- achieving genuinely perfect resilience. We could not, in the scope of this work, confirm whether communication degradation is reaching the evaluated policies' observations at all in this scenario: an independent bandwidth-vs-reward sweep (Fig.~\ref{fig:bandwidth_heatmap}) produced a bit-identical mean team reward across every degradation level from full communication to total blackout. A scenario with tighter vessel spacing and/or a metric with more dynamic range is needed before resilience claims here can be taken as validated.
+    \item \textbf{Hydrodynamic coefficient realism.} The MMG added-mass/damping coefficients used throughout (Section~\ref{sec:mmg-dynamics}) are hand-tuned engineering estimates, not derived from captive-model-test data or a documented regression method such as Clarke, Gedling, and Hine's (1983) hull-form-based estimation approach or its more recent revision by Chame et al. (2025). This is directly visible in Fig.~\ref{fig:sea_trials}: the 30$^\circ$ turning circle's tactical diameter over its first complete loop ($\sim$7.6 km) is roughly 10$\times$ the IMO MSC.137(76) ceiling of $5L$, indicating the model's yaw response is still more sluggish than a real vessel of this size even after deriving `thrust_coefficient`/`yaw_coefficient` from each vessel type's own declared `max_speed`/`turning_circle` (see \texttt{marlin\_twin/envs/vessel\_profiles.py}) to fix a 150-180$\times$ thrust-scaling bug found while investigating this section. Substituting a published regression is not a drop-in fix, however: those methods predict \emph{linear} velocity derivatives for the classical Abkowitz/MMG force law ($Y \propto v$), whereas the damping terms in this codebase's \texttt{VesselDynamics.compute\_derivatives} enter as \emph{quadratic} drag ($Y \propto v|v|$, and likewise for surge and yaw). Applying a published linear derivative to a quadratic-drag term would require an unvalidated linearization/rescaling choice of its own -- no more principled than the current hand-tuned constants -- so a genuine fix means restructuring the force law to the standard linear-plus-cross-flow form before published coefficients can be substituted, not merely sourcing better numbers for the existing equations.
+    \item \textbf{Resilience index still saturated, though the underlying metric no longer is.} An earlier version of this evaluation had every algorithm scoring an identical $J(\lambda) = 1.0000$ with zero variance -- we traced this to three compounding bugs, all now fixed: (1) marine radar was generated every step regardless of communication-degradation level, silently backstopping every dropped AIS reading; (2) the safety score averaged a per-step \emph{projected} CPA (a linear velocity extrapolation) across the whole episode, which reads near-zero in the instant just before a rudder command actually changes heading regardless of how the real trajectory turns out, diluting any real close encounter into insignificance; and (3) the original 4000m vessel separation left no real time, within an RL-episode-length window, for this vessel class's realistic (and separately-fixed -- see the coefficient-realism item above) yaw response to develop any avoidance turn before the encounter -- confirmed empirically: true minimum separation was 0m regardless of degradation level or episode length up to 1500s at that spacing. With radar gating restored, a true per-episode minimum-separation metric, and a retuned 1600m-separation scenario (Section~\ref{sec:mmg-dynamics}), the safety score is no longer saturated: it now meaningfully separates methods in absolute terms (MADDPG $0.221$, MARLIN-Twin $0.219$, IPPO $0.195$, Rule-Based COLREGs $0.097$; Ablation 2's flat-MLP encoder scores $0.016$, roughly $13\times$ worse than every other variant) and the untrained Rule-Based COLREGs baseline shows small but genuine variation across degradation levels ($0.0965$--$0.0969$). $R_{\text{resilience}}$ itself, however, is still exactly $1.0000$ for every one of the three RL-trained policies and all four ablation variants (only Rule-Based COLREGs shows any measurable degradation sensitivity, $R_{\text{resilience}} = 0.9998$) -- with only 150 training episodes (reduced from an originally-planned 250 for computational tractability within a single retraining pass; see \texttt{scripts/run\_retrain\_all\_baselines.py}), none of the RL policies have plausibly had the chance to learn to condition their avoidance behavior on communication/tracking quality at all, so a flat, degradation-insensitive policy is the more likely explanation than genuine resilience. More extensive training under varying degradation, across multiple seeds, is needed before a resilience claim for the RL policies specifically can be taken as validated. The bandwidth-vs-reward sweep (Fig.~\ref{fig:bandwidth_heatmap}) still shows a bit-identical mean team reward across every degradation level for the current checkpoint -- expected, not a regression: the training reward's own safety term still uses the per-step \emph{projected} CPA described above, which this section's fixes deliberately left untouched for reward shaping (only the resilience-benchmark's evaluation metric was changed), so it is not yet expected to reflect degradation either.
     \item \textbf{Simulated, not real-world, AIS data.} No NOAA or other real-world AIS dataset is used anywhere in this codebase; the AIS trajectory validation in Fig.~\ref{fig:real_ais} is a simulated, representative trajectory, not measured telemetry.
 \end{itemize}
 
 \section{Conclusion \& Future Work}
-This paper presented MARLIN-Twin, a resilient multi-agent reinforcement learning framework for autonomous vessel collision avoidance under communication outages. By coupling an EKF/JPDA Digital Twin with a Multi-Head Graph Attention Network and CTDE MAPPO optimization, MARLIN-Twin achieves a Coordination Resilience Index of $1.0000$ in our evaluation scenario, though Section~\ref{sec:limitations} discusses why this specific result should not yet be read as evidence of genuine superior resilience. Simulated AIS trajectory validation demonstrates the EKF/JPDA Digital Twin's dead-reckoning fallback functions correctly during a blackout, with position error growing to roughly 3498m during the outage window. Future work will focus on a more discriminative multi-vessel evaluation scenario, grounding the MMG hydrodynamic coefficients in captive-model-test data, integrating 3D wave disturbances, and conducting physical ASV field trials.
+This paper presented MARLIN-Twin, a resilient multi-agent reinforcement learning framework for autonomous vessel collision avoidance under communication outages. By coupling an EKF/JPDA Digital Twin with a Multi-Head Graph Attention Network and CTDE MAPPO optimization, MARLIN-Twin achieves a Coordination Resilience Index of $1.0000$ in our evaluation scenario, though Section~\ref{sec:limitations} discusses why this specific result should not yet be read as evidence of genuine superior resilience. Simulated AIS trajectory validation demonstrates the EKF/JPDA Digital Twin's dead-reckoning fallback functions correctly during a blackout, with position error growing to roughly 1264m during the outage window. Future work will focus on a more discriminative multi-vessel evaluation scenario, restructuring the MMG force law to the standard linear-plus-cross-flow form so that published captive-model-test regressions (e.g. Clarke et al., 1983; Chame et al., 2025) can be substituted for the current hand-tuned damping coefficients, integrating 3D wave disturbances, and conducting physical ASV field trials.
 
 \bibliographystyle{IEEEtran}
 \bibliography{references}

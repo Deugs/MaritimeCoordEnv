@@ -30,19 +30,34 @@ def main():
     )
     solver = MMGDynamicsSolver(dynamics)
 
-    print("\n1. Running Turning Circle Sea Trial (35 deg rudder)...")
-    tc_results = solver.run_turning_circle_test(rudder_angle_deg=35.0, duration=400.0)
+    # VesselDynamics.max_rudder_angle defaults to pi/6 (30 deg) and every
+    # commanded rudder angle is clamped to it, so 35.0 here would silently
+    # simulate a 30 deg turn while the label claimed 35 deg.
+    print("\n1. Running Turning Circle Sea Trial (30 deg rudder)...")
+    # duration=1200.0 -- after fixing the double-RPM-scaling thrust bug and
+    # deriving a real yaw_coefficient from turning_circle (see
+    # VesselDynamics.thrust_coefficient/yaw_coefficient), this vessel takes
+    # ~1000s to complete one full turning-circle loop; tactical_diameter/
+    # advance/transfer only mean anything once loop_completed is True (see
+    # run_turning_circle_test's docstring).
+    tc_results = solver.run_turning_circle_test(rudder_angle_deg=30.0, duration=1200.0)
+    if not tc_results["loop_completed"]:
+        print(
+            "   WARNING: turning circle did not complete a full loop -- "
+            "numbers below are not a true diameter"
+        )
     print(f"   Tactical Diameter: {tc_results['tactical_diameter']:.2f} m")
     print(f"   Advance:          {tc_results['advance']:.2f} m")
     print(f"   Transfer:         {tc_results['transfer']:.2f} m")
 
     print("\n2. Running 10/10 Zig-zag Sea Trial...")
-    # This vessel's yaw response to a 10 deg rudder is slow (empirically
-    # confirmed to need ~5600s to complete both overshoots); a short
-    # duration here would leave the maneuver non-convergent and
-    # run_zigzag_test would honestly report None rather than a
-    # placeholder number.
-    zz_duration = 6000.0
+    # This vessel's yaw response to a 10 deg rudder needs ~2900s to complete
+    # both overshoots after fixing the double-RPM-scaling thrust bug and
+    # deriving a real yaw_coefficient (see
+    # VesselDynamics.thrust_coefficient/yaw_coefficient); a short duration
+    # here would leave the maneuver non-convergent and run_zigzag_test would
+    # honestly report None rather than a placeholder number.
+    zz_duration = 2900.0
     zz_results = solver.run_zigzag_test(angle_deg=10.0, duration=zz_duration)
 
     def _format_overshoot(angle: float | None, converged: bool) -> str:
@@ -66,11 +81,14 @@ def main():
     # Generate Validation Figure
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
 
-    # Plot Turning Circle
+    # Plot Turning Circle -- sliced to the first completed loop only,
+    # matching what tactical_diameter/advance/transfer actually measure.
     tc_traj = tc_results["trajectory"]
+    if tc_results["loop_completed_step"] is not None:
+        tc_traj = tc_traj[: tc_results["loop_completed_step"] + 1]
     x_tc = [s.x for s in tc_traj]
     y_tc = [s.y for s in tc_traj]
-    ax1.plot(x_tc, y_tc, "b-", label="Trajectory (35 deg Rudder)")
+    ax1.plot(x_tc, y_tc, "b-", label="Trajectory (30 deg Rudder)")
     ax1.set_title("IMO Turning Circle Maneuver", fontweight="bold")
     ax1.set_xlabel("Easting (m)")
     ax1.set_ylabel("Northing (m)")
