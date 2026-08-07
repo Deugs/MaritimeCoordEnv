@@ -161,6 +161,8 @@ def render_fig5_sea_trials() -> dict:
         "tactical_diameter_m": tc_result["tactical_diameter"],
         "first_overshoot_deg": zz_result["first_overshoot_angle"],
         "first_overshoot_converged": zz_result["first_overshoot_converged"],
+        "second_overshoot_deg": zz_result["second_overshoot_angle"],
+        "second_overshoot_converged": zz_result["second_overshoot_converged"],
     }
 
 
