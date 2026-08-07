@@ -530,7 +530,7 @@ def render_fig9_benchmark_resilience() -> dict:
 
 
 def render_fig10_extended_training(n_seeds: int = 3, total_episodes: int = 200) -> dict:
-    """Figure 10: Real 5-Seed Extended Curriculum Training Curves -- actual per-episode
+    """Figure 10: Real Extended Curriculum Training Curves -- actual per-episode
     team reward recorded during real TwoStageCurriculumTrainer.train_curriculum runs,
     not a fabricated exponential-decay curve."""
     seeds = [42, 100, 200, 300, 400][:n_seeds]
@@ -606,7 +606,7 @@ def main():
     fig9_stats = render_fig9_benchmark_resilience()
     print(f"   {fig9_stats}")
 
-    print("5. Running real 5-Seed Extended Training Curves (Figure 10)...")
+    print("5. Running real Extended Training Curves (Figure 10)...")
     fig10_stats = render_fig10_extended_training()
     print(f"   {fig10_stats}")
 

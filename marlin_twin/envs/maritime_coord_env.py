@@ -278,7 +278,11 @@ class MaritimeCoordEnv(BaseMaritimeEnvironment):
         obs = self._build_observations()
         vessel_ids = list(new_states.keys())
         true_pairwise_distances = [
-            float(np.linalg.norm(new_states[vessel_ids[i]].position() - new_states[vessel_ids[j]].position()))
+            float(
+                np.linalg.norm(
+                    new_states[vessel_ids[i]].position() - new_states[vessel_ids[j]].position()
+                )
+            )
             for i in range(len(vessel_ids))
             for j in range(i + 1, len(vessel_ids))
         ]

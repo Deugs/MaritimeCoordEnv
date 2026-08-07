@@ -75,7 +75,9 @@ def run_degradation_sweep(
 
                 obs, _, _, done, info = env.step(actions)
                 if "true_min_pairwise_distance" in info:
-                    episode_min_distance = min(episode_min_distance, info["true_min_pairwise_distance"])
+                    episode_min_distance = min(
+                        episode_min_distance, info["true_min_pairwise_distance"]
+                    )
 
             seed_scores.append(compute_safety_score([episode_min_distance]))
 

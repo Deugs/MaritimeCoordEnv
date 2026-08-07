@@ -42,7 +42,10 @@ def main():
     # run_turning_circle_test's docstring).
     tc_results = solver.run_turning_circle_test(rudder_angle_deg=30.0, duration=1200.0)
     if not tc_results["loop_completed"]:
-        print("   WARNING: turning circle did not complete a full loop -- numbers below are not a true diameter")
+        print(
+            "   WARNING: turning circle did not complete a full loop -- "
+            "numbers below are not a true diameter"
+        )
     print(f"   Tactical Diameter: {tc_results['tactical_diameter']:.2f} m")
     print(f"   Advance:          {tc_results['advance']:.2f} m")
     print(f"   Transfer:         {tc_results['transfer']:.2f} m")
