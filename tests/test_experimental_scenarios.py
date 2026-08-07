@@ -57,15 +57,23 @@ def test_compute_colregs_violation_rate_is_a_real_fraction():
 
 
 def test_mappo_and_maddpg_evaluate_no_longer_return_hardcoded_stub_constants():
-    config = MaritimeExperimentConfig(scenario_type="head_on", n_vessels=2, episode_length=10)
+    # episode_length=13, n_episodes=3 -- denom = n_episodes * episode_length *
+    # n_vessels = 78, which 0.05 (the old hardcoded stub) cannot divide evenly
+    # into for any integer violation_count. A round episode_length=10/
+    # n_episodes=2 (denom=40) previously let a real, freshly computed
+    # violation_count of 2 coincidentally land exactly on the old stub value
+    # (2/40 == 0.05) once the vessel dynamics changed enough to shift the
+    # count -- an unrelated dynamics fix should not be able to flip this
+    # regression guard by coincidence.
+    config = MaritimeExperimentConfig(scenario_type="head_on", n_vessels=2, episode_length=13)
     env = MaritimeCoordEnv(config)
     policies = {0: RuleBasedCOLREGsController(0), 1: RuleBasedCOLREGsController(1)}
 
-    mappo_results = MAPPOTrainer(config).evaluate(env, policies, n_episodes=2)
+    mappo_results = MAPPOTrainer(config).evaluate(env, policies, n_episodes=3)
     assert mappo_results["efficiency_score"] != 0.85
     assert mappo_results["colregs_violation_rate"] != 0.05
 
-    maddpg_results = MADDPGTrainer(config).evaluate(env, policies, n_episodes=2)
+    maddpg_results = MADDPGTrainer(config).evaluate(env, policies, n_episodes=3)
     assert maddpg_results["efficiency_score"] != 0.85
     assert maddpg_results["colregs_violation_rate"] != 0.05
 

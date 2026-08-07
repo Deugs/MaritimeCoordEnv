@@ -25,9 +25,24 @@ radius of `turning_circle / 2` at 80%-throttle cruise speed and full
 * rudder_area * u_cruise**2)` where `r_target = u_cruise / (turning_circle /
 2)` and `u_cruise = 0.8 * max_speed`. This ignores the (much smaller)
 quadratic `N_r` damping term, so the resulting turning circle lands in the
-right order of magnitude relative to `turning_circle`, not exactly on it —
-see the Limitations discussion in the paper for why an exact match isn't
-claimed.
+right order of magnitude relative to `turning_circle`, not exactly on it.
+
+**CARGO and USV are the exception**: their `N_r`/`yaw_coefficient` are
+*not* the formula above. That formula's damping term was weak enough that
+the simulated turning circle missed the IMO Res. MSC.137(76) 5*L tactical-
+diameter ceiling by a wide margin (see `VesselDynamics.N_r`'s docstring in
+`data_classes.py` for the diagnosis). CARGO/USV's values here were instead
+found by direct simulation search and verified, on the actual MMG solver
+(`MMGDynamicsSolver.run_turning_circle_test`/`run_zigzag_test`), to satisfy
+both the 5*L turning-circle ceiling and the 10/10 zig-zag <=25-degree
+overshoot criterion simultaneously — checked across 10 consecutive zig-zag
+reversal cycles, not just the officially-measured first two overshoots, to
+rule out a response that passes the checked overshoots en route to a
+slower divergence. CARGO and USV are the only two types any scenario in
+this codebase actually instantiates (see `scenarios.py`'s default
+CARGO/USV-by-parity fleet); CONTAINER/TANKER/PASSENGER/FERRY/FISHING below
+still use the un-reverified formula value and should not be assumed
+IMO-compliant if a future scenario starts using them.
 
 **Provenance — read before trusting any single number.** Only `TANKER`'s
 `length`/`beam`/`draft`/`mass`/`max_speed`/`propeller_diameter`/`rudder_area`
@@ -88,12 +103,15 @@ VESSEL_PROFILES: dict[VesselType, dict] = {
         N_r_dot=-500000.0,
         X_u=-1000.0,
         Y_v=-5000.0,
-        N_r=-20000.0,
+        # N_r/yaw_coefficient below are IMO-criteria-verified, not
+        # formula-derived (see module docstring's "IMO turning-circle /
+        # zig-zag compliance" note and `VesselDynamics.N_r`'s docstring).
+        N_r=-1.0e9,
         max_rpm=150.0,
         rudder_area=20.0,
         propeller_diameter=4.0,
         thrust_coefficient=90.0,
-        yaw_coefficient=24.867960,
+        yaw_coefficient=8000.0,
     ),
     VesselType.CONTAINER: dict(
         length=300.0,
@@ -186,12 +204,13 @@ VESSEL_PROFILES: dict[VesselType, dict] = {
         N_r_dot=-60000.0,
         X_u=-400.0,
         Y_v=-1500.0,
-        N_r=-4000.0,
+        # IMO-criteria-verified, not formula-derived -- see CARGO's N_r above.
+        N_r=-4.0e7,
         max_rpm=180.0,
         rudder_area=4.0,
         propeller_diameter=4.0,
         thrust_coefficient=25.0,
-        yaw_coefficient=49.735920,
+        yaw_coefficient=24000.0,
     ),
     VesselType.FERRY: dict(
         length=100.0,

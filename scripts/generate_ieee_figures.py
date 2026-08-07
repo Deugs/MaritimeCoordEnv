@@ -278,19 +278,23 @@ def render_fig5_sea_trials() -> dict:
     # rudder angle to it, so a caller passing 35.0 here was silently
     # simulating a 30 deg turn while every caption/label claimed 35 deg.
     #
-    # duration=1200/3200 -- after fixing the double-RPM-scaling thrust bug and
-    # deriving a real yaw_coefficient from each type's own turning_circle
-    # (see VesselDynamics.thrust_coefficient/yaw_coefficient), this vessel
-    # takes ~1000s to complete one full turning-circle loop and ~3000s to
-    # complete two zigzag overshoots; the old duration=400/6000 defaults
-    # predate both fixes and never converged under the corrected dynamics
-    # (see run_turning_circle_test's loop_completed / run_zigzag_test's
-    # *_converged flags -- always check them rather than trusting a
-    # returned number blindly).
+    # duration=1200/500 -- after raising CARGO's N_r/yaw_coefficient to meet
+    # the IMO Res. MSC.137(76) 5*L turning-circle ceiling (see
+    # VesselDynamics.N_r's docstring), this vessel completes a full
+    # turning-circle loop in ~60s and both zig-zag overshoots by ~250s;
+    # `run_zigzag_test` only ever executes 2 rudder reversals and then holds
+    # the rudder fixed for the rest of `duration` (by design -- it measures
+    # exactly the two IMO-specified overshoots, nothing past them), so a
+    # duration much longer than needed to reach the second overshoot would
+    # plot an extended stretch of the vessel simply circling under that
+    # held rudder -- correct behavior, but a needlessly confusing zig-zag
+    # figure. duration=500 leaves a clean settle after the second overshoot
+    # without running into that.
     tc_result = solver.run_turning_circle_test(rudder_angle_deg=30.0, duration=1200.0)
-    zz_result = solver.run_zigzag_test(angle_deg=10.0, duration=2900.0)
+    zz_result = solver.run_zigzag_test(angle_deg=10.0, duration=500.0)
     assert tc_result["loop_completed"], "turning circle did not complete a full loop"
     assert zz_result["first_overshoot_converged"], "zigzag did not converge"
+    assert zz_result["second_overshoot_converged"], "zigzag second overshoot did not converge"
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(7.16, 3.2))
 
@@ -310,9 +314,39 @@ def render_fig5_sea_trials() -> dict:
     ax1.grid(True, linestyle="--", alpha=0.5)
     ax1.legend(loc="lower right")
 
+    # `run_zigzag_test` only executes the 2 rudder reversals the IMO 10/10
+    # test itself calls for, then intentionally holds the rudder fixed at
+    # +10 deg for the rest of `duration` (see the comment above) -- so
+    # everything after the second overshoot's recovery is just the vessel
+    # continuing to turn, unremarkably, under that held rudder. Plotting
+    # that stretch would show heading sweeping repeatedly through +-180 deg
+    # as it laps its own turning circle, which reads as runaway divergence
+    # to a reader even though it is correct, expected behavior for a fixed
+    # rudder input -- so the plot is cut shortly after the recovery through
+    # the +10 deg band following the second overshoot's trough, once
+    # heading is unambiguously past the zig-zag band and headed for that
+    # same unremarkable lap rather than a third reversal.
+    # Re-walk the same 3-phase state machine `run_zigzag_test` itself uses
+    # (angle_deg=10 target) purely to find where phase 3 exits -- i.e. where
+    # the second overshoot's recovery crosses back through +10 deg -- so
+    # the cutoff below is anchored to that specific event rather than a
+    # magnitude threshold, which the later held-rudder laps would also
+    # cross repeatedly.
     zz_traj = zz_result["trajectory"]
-    t_sec = np.arange(len(zz_traj))
-    heading_deg = [np.degrees(s.heading) for s in zz_traj]
+    heading_deg_full = [np.degrees(s.heading) for s in zz_traj]
+    target_deg = 10.0
+    phase, cutoff_idx = 1, len(heading_deg_full)
+    for i, h in enumerate(heading_deg_full):
+        if phase == 1 and h >= target_deg:
+            phase = 2
+        elif phase == 2 and h <= -target_deg:
+            phase = 3
+        elif phase == 3 and h >= target_deg:
+            cutoff_idx = i
+            break
+    plot_end = min(cutoff_idx + 15, len(heading_deg_full))
+    t_sec = np.arange(plot_end)
+    heading_deg = heading_deg_full[:plot_end]
     ax2.plot(t_sec, heading_deg, "b-", lw=2.0, label="Heading Angle (deg)")
     ax2.axhline(10.0, color="r", linestyle="--", lw=1.2, label="Rudder Target (+/-10 deg)")
     ax2.axhline(-10.0, color="r", linestyle="--", lw=1.2)
