@@ -22,6 +22,7 @@ class DigitalTwinEstimator:
         self.config = config or DigitalTwinConfig()
         self.enabled = enabled
         self.estimates: dict[int, VesselStateEstimate] = {}
+        self.last_timestamp: dict[int, float] = {}
 
     def update(
         self,
@@ -42,6 +43,8 @@ class DigitalTwinEstimator:
 
         for vid, state in actual_states.items():
             ais = ais_dict.get(vid)
+            prev_timestamp = self.last_timestamp.get(vid, timestamp)
+            self.last_timestamp[vid] = timestamp
 
             if ais and not getattr(ais, "is_suspect", False):
                 # EKF Update using AIS measurement
@@ -115,9 +118,15 @@ class DigitalTwinEstimator:
                         overall_confidence=0.85,
                     )
                 elif last_est and self.enabled:
-                    # Dead Reckoning Fallback with EKF Covariance Growth & Process Noise Drift
-                    dt = 1.0
-                    cov = last_est.covariance + np.eye(6) * 2.0
+                    # Dead Reckoning Fallback with EKF Covariance Growth & Process Noise Drift.
+                    # `dt` must be the real elapsed time since the last update() call for this
+                    # vessel, not a hardcoded 1.0 -- callers driving this at e.g. a 10s tick (or
+                    # real, irregular AIS reporting intervals) previously had their dead-reckoning
+                    # position projection silently truncated to 1 simulated second of drift per
+                    # call, understating blackout position error by the same factor the real tick
+                    # interval exceeds 1s.
+                    dt = max(timestamp - prev_timestamp, 0.0)
+                    cov = last_est.covariance + np.eye(6) * 2.0 * max(dt, 1.0)
                     pos_std = float(np.sqrt(cov[0, 0]) * 0.05)
                     drift_x = float(np.random.normal(0, pos_std))
                     drift_y = float(np.random.normal(0, pos_std))

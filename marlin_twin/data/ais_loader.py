@@ -1,4 +1,22 @@
-"""Open AIS dataset loading and conversion to VesselState trajectories."""
+"""Open AIS dataset loading and conversion to VesselState trajectories.
+
+`marlin_twin/data/real_ais_sample.csv` (loaded via `load_ais_csv` below) is a real,
+verifiable NOAA MarineCadastre AIS excerpt, not synthetic data: 48 consecutive AIS
+position reports (2017-01-20 10:52:15 - 11:43:15 UTC, ~61-71s apart) for a single
+vessel ("EARLY DAWN", MMSI 366940480) underway at 8.8-9.8 knots, drawn from NOAA's
+public-domain `AIS_2017_01_Zone01.csv` bulk release (U.S. Government AIS data,
+no copyright restriction -- see https://marinecadastre.gov/ais/). This specific
+excerpt was obtained via a GitHub mirror of that same NOAA file
+(https://github.com/ABDULSABOOR1995/Vessel-s-Anomaly-Behaviour-Detection,
+`AIS_2017_01_Zone01.csv`) since this environment cannot reach marinecadastre.gov
+directly; the row-level MMSI/position/speed/course values are unmodified NOAA
+data. Vessel name and MMSI are the same publicly-broadcast identifiers any AIS
+receiver or public tracking site (e.g. MarineTraffic) already displays for this
+vessel -- using them for a validation figure carries no different provenance or
+disclosure obligation than the government dataset itself. `generate_sample_ais_trajectory`
+below remains as a separate, explicitly-synthetic fallback/test fixture, kept
+distinct from the real data path so the two are never confused with each other.
+"""
 
 import os
 import numpy as np
@@ -78,6 +96,15 @@ class AISDataLoader:
 
         df = df.dropna(subset=required_cols).sort_values("BaseDateTime").reset_index(drop=True)
         return df
+
+    @staticmethod
+    def elapsed_seconds(df: pd.DataFrame) -> list[float]:
+        """Real, irregular per-row elapsed seconds since the first AIS report --
+        real AIS reporting intervals are not evenly spaced (unlike a fixed-dt
+        simulation loop), so callers driving an estimator over this data must use
+        each row's actual elapsed time rather than assuming a constant step."""
+        ts = pd.to_datetime(df["BaseDateTime"])
+        return [(t - ts.iloc[0]).total_seconds() for t in ts]
 
     @classmethod
     def convert_to_vessel_states(cls, df: pd.DataFrame, vessel_id: int = 0) -> list[VesselState]:

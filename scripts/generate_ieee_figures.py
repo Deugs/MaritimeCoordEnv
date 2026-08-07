@@ -5,13 +5,13 @@ Re-renders all empirical performance charts matching IEEE Transactions publicati
 300 DPI, colorblind-friendly palette, sans-serif typography, and standard column widths.
 
 Every figure below is computed from a real run of this codebase's own solvers/estimators/
-policies -- none of the values are hand-picked placeholders. Where a figure's title claims
-"real-world" data (fig11), that claim is now honest: this repository has no real NOAA/AIS
-dataset anywhere in it (confirmed by inspecting `marlin_twin/data/ais_loader.py`, which only
-ever generates a synthetic sample trajectory), so fig11 is now explicitly labeled as a
-simulated trajectory rather than falsely claiming real-world provenance. fig3 (GAT attention)
-is a real forward pass of a trained checkpoint on a constructed-but-verified encounter scene,
-not a hand-drawn illustration with invented weights.
+policies -- none of the values are hand-picked placeholders. fig11 uses a genuine NOAA
+MarineCadastre AIS trajectory (`marlin_twin/data/real_ais_sample.csv`, 48 real position
+reports for a real vessel -- see `ais_loader.py`'s module docstring for full provenance),
+not a simulated one; fig6 still uses a simulated MMG-solver trajectory (a different,
+complementary demonstration of the same EKF/blackout mechanism, not claimed as real-world).
+fig3 (GAT attention) is a real forward pass of a trained checkpoint on a
+constructed-but-verified encounter scene, not a hand-drawn illustration with invented weights.
 
 Usage:
     python scripts/generate_ieee_figures.py
@@ -418,6 +418,93 @@ def _run_blackout_digital_twin(seed: int, n_steps: int = 120, dt: float = 10.0) 
     }
 
 
+def _run_real_ais_digital_twin(outage_duration_s: float = 300.0) -> dict:
+    """Drives the EKF/JPDA DigitalTwinEstimator over a real NOAA MarineCadastre AIS
+    trajectory (`marlin_twin/data/real_ais_sample.csv` -- see `ais_loader.py`'s module
+    docstring for full provenance), with a simulated communication blackout injected
+    over the middle third of the run. Unlike `_run_blackout_digital_twin`, the "true"
+    trajectory here is real recorded vessel positions, not an MMG-solver rollout: the
+    real AIS reports themselves stand in for ground truth (as is standard practice
+    validating against AIS data, since consumer-grade GPS position accuracy is well
+    within the meters-scale noise already added on top here), and reporting intervals
+    are real and irregular (~61-71s apart), not a fixed simulation dt.
+    """
+    from marlin_twin.data.ais_loader import AISDataLoader
+
+    csv_path = os.path.join(REPO_ROOT, "marlin_twin", "data", "real_ais_sample.csv")
+    df = AISDataLoader.load_ais_csv(csv_path)
+    true_states = AISDataLoader.convert_to_vessel_states(df, vessel_id=1)
+    elapsed = AISDataLoader.elapsed_seconds(df)
+
+    total_span = elapsed[-1] - elapsed[0]
+    outage_start_s = elapsed[0] + total_span / 3.0
+    outage_end_s = outage_start_s + outage_duration_s
+
+    estimator = DigitalTwinEstimator()
+    rng = np.random.default_rng(11)
+    true_xs, true_ys, est_xs, est_ys, outage_mask = [], [], [], [], []
+
+    for i, state in enumerate(true_states):
+        t = elapsed[i]
+        true_xs.append(state.x)
+        true_ys.append(state.y)
+
+        is_outage = outage_start_s <= t <= outage_end_s
+        outage_mask.append(is_outage)
+
+        ais_readings = {}
+        if not is_outage:
+            meas_pos = state.position() + rng.normal(0, 5.0, 2)
+            ais_readings[1] = AISReading(
+                vessel_id=1,
+                timestamp=t,
+                reported_position=meas_pos,
+                reported_heading=state.heading,
+                reported_speed=state.speed,
+            )
+
+        twin = estimator.update(
+            scene_id="real_ais_scene",
+            timestamp=t,
+            actual_states={1: state},
+            ais_readings=ais_readings,
+            radar_tracks=[],
+        )
+        est_state = twin.vessel_estimates[1].estimated_state
+        est_xs.append(est_state.x)
+        est_ys.append(est_state.y)
+
+    true_xs = np.array(true_xs)
+    true_ys = np.array(true_ys)
+    est_xs = np.array(est_xs)
+    est_ys = np.array(est_ys)
+    outage_mask = np.array(outage_mask)
+    time_axis = np.array(elapsed)
+
+    pos_errors = np.sqrt((true_xs - est_xs) ** 2 + (true_ys - est_ys) ** 2)
+    overall_rmse = float(np.sqrt(np.mean(pos_errors**2)))
+    blackout_rmse = (
+        float(np.sqrt(np.mean(pos_errors[outage_mask] ** 2))) if outage_mask.any() else float("nan")
+    )
+
+    return {
+        "true_xs": true_xs,
+        "true_ys": true_ys,
+        "est_xs": est_xs,
+        "est_ys": est_ys,
+        "outage_mask": outage_mask,
+        "time_axis": time_axis,
+        "pos_errors": pos_errors,
+        "overall_rmse": overall_rmse,
+        "blackout_rmse": blackout_rmse,
+        "outage_start_s": outage_start_s,
+        "outage_end_s": outage_end_s,
+        "n_points": len(true_states),
+        "vessel_name": str(df["VesselName"].iloc[0]),
+        "mmsi": str(df["MMSI"].iloc[0]),
+    }
+
+
 def render_fig6_digital_twin_blackout() -> dict:
     """Figure 6: EKF/JPDA Digital Twin Estimation during a real simulated 300s Blackout."""
     result = _run_blackout_digital_twin(seed=7)
@@ -455,20 +542,22 @@ def render_fig6_digital_twin_blackout() -> dict:
 
 
 def render_fig11_real_ais_validation() -> dict:
-    """Figure 11: Digital Twin validation on a simulated AIS trajectory during a 300s
-    blackout. Labeled honestly -- this repo has no real-world AIS dataset (see module
-    docstring), so this is NOT claimed as real-world NOAA data."""
-    result = _run_blackout_digital_twin(seed=99)
+    """Figure 11: Digital Twin validation on a real NOAA MarineCadastre AIS trajectory
+    (48 real position reports, 2017-01-20, vessel "EARLY DAWN") with a simulated 300s
+    communication blackout injected -- see `ais_loader.py`'s module docstring and
+    `marlin_twin/data/real_ais_sample.csv` for full data provenance. This is genuine
+    real-world AIS telemetry, not a simulated trajectory."""
+    result = _run_real_ais_digital_twin()
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(7.16, 3.2))
 
     om = result["outage_mask"]
-    ax1.plot(result["true_ys"], result["true_xs"], "k-", lw=2, label="Ground-Truth Trajectory")
+    ax1.plot(result["true_ys"], result["true_xs"], "k-", lw=2, label="Real AIS Trajectory")
     ax1.plot(
         result["est_ys"], result["est_xs"], "b--", lw=2, label="EKF/JPDA Digital Twin Estimate"
     )
     ax1.plot(result["est_ys"][om], result["est_xs"][om], "r.", label="AIS Outage (Dead Reckoning)")
-    ax1.set_title("Simulated AIS Trajectory Tracking", fontweight="bold")
+    ax1.set_title("Real AIS Trajectory Tracking", fontweight="bold")
     ax1.set_xlabel("East (y) [meters]")
     ax1.set_ylabel("North (x) [meters]")
     ax1.grid(True, linestyle="--", alpha=0.5)
@@ -482,7 +571,7 @@ def render_fig11_real_ais_validation() -> dict:
         alpha=0.15,
         label="AIS Blackout",
     )
-    ax2.set_title("Simulated AIS Tracking Position Error", fontweight="bold")
+    ax2.set_title("Real AIS Tracking Position Error", fontweight="bold")
     ax2.set_xlabel("Time [seconds]")
     ax2.set_ylabel("Position Error [meters]")
     ax2.grid(True, linestyle="--", alpha=0.5)
@@ -491,7 +580,13 @@ def render_fig11_real_ais_validation() -> dict:
     plt.tight_layout()
     save_fig_all_formats("fig11_real_ais_validation_ieee")
 
-    return {"overall_rmse": result["overall_rmse"], "blackout_rmse": result["blackout_rmse"]}
+    return {
+        "overall_rmse": result["overall_rmse"],
+        "blackout_rmse": result["blackout_rmse"],
+        "n_points": result["n_points"],
+        "vessel_name": result["vessel_name"],
+        "mmsi": result["mmsi"],
+    }
 
 
 def render_fig8_degradation_heatmap() -> dict:
