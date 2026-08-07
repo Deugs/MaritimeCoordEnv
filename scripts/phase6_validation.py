@@ -8,18 +8,19 @@ Usage:
 """
 
 import os
+import sys
 from pathlib import Path
 
+import numpy as np
 import matplotlib.pyplot as plt
 from marlin_twin.data_classes import MaritimeExperimentConfig, VesselAction
-from marlin_twin.envs.maritime_coord_env import MaritimeCoordEnv
 from marlin_twin.agents.vessel_agent import VesselAgentWrapper
 from marlin_twin.baselines.factory import BaselineFactory
-from marlin_twin.training.mappo import _build_scene_graph
 from marlin_twin.utils.metrics import compute_resilience_index
-from marlin_twin.utils.scoring import compute_safety_score
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _eval_common import run_degradation_sweep  # noqa: E402
 
 
 def main():
@@ -44,52 +45,55 @@ def main():
     resilience_indices = {}
 
     print("\n1. Running Comparative Bandwidth Degradation Sweeps across 4 Algorithms...")
-    config = MaritimeExperimentConfig(scenario_type="channel", n_vessels=3, episode_length=30)
+    # episode_length=500, not the original 30 -- this vessel class's realistic
+    # yaw/thrust response (see VesselDynamics.thrust_coefficient/yaw_coefficient)
+    # needs real time to develop any avoidance turn; 30 steps at ~8-9 m/s covers
+    # a few hundred meters, nowhere near enough for this scenario's channel
+    # crossing to actually occur.
+    config = MaritimeExperimentConfig(scenario_type="channel", n_vessels=3, episode_length=500)
     factory = BaselineFactory(config)
+    # 5 seeds, not 1 -- these policies are freshly-initialized/untrained (no
+    # checkpoint is loaded here), so a single seed's J(1.0) can land on a
+    # near-zero outlier by chance alone; compute_resilience_index divides by
+    # J(1.0), so a single unlucky seed can send the whole ratio to a
+    # nonsensical value (e.g. R > 1 or, as observed, R > 25).
+    eval_seeds = [42, 100, 200, 300, 400]
+
+    def make_select_action(alg):
+        def select_action(env, vid, policy, agent_obs, graph, node_idx):
+            if alg == "rule_based":
+                act_vec = policy.act(agent_obs, deterministic=True)
+                return VesselAction(
+                    vessel_id=vid,
+                    propeller_rpm=float(act_vec[0]),
+                    rudder_angle=float(act_vec[1]),
+                    message_targets=[],
+                )
+            wrapper = VesselAgentWrapper(env.get_scene().vessels[vid], policy)
+            return wrapper.select_action(agent_obs, graph, node_idx, deterministic=True)
+
+        return select_action
 
     for alg in algorithms:
-        policies = factory.create(alg)
-        uses_graph = any(getattr(p, "USES_GRAPH", False) for p in policies.values())
         print(f"\n   Testing Algorithm: {alg_labels[alg]}")
 
-        for lam in degradation_levels:
-            env = MaritimeCoordEnv(config)
-            env.set_communication_degradation(lam)
-
-            obs, _ = env.reset(seed=42)
-            done = False
-            cpa_list = []
-
-            while not done:
-                if uses_graph:
-                    graph, node_idx_map = _build_scene_graph(env, obs.keys(), float(env.time_step))
-                else:
-                    graph, node_idx_map = None, {}
-
-                actions = {}
-                for vid, agent_obs in obs.items():
-                    pol = policies[vid]
-                    if alg == "rule_based":
-                        act_vec = pol.act(agent_obs, deterministic=True)
-                        actions[vid] = VesselAction(
-                            vessel_id=vid,
-                            propeller_rpm=float(act_vec[0]),
-                            rudder_angle=float(act_vec[1]),
-                            message_targets=[],
-                        )
-                    else:
-                        wrapper = VesselAgentWrapper(env.get_scene().vessels[vid], pol)
-                        actions[vid] = wrapper.select_action(
-                            agent_obs, graph, node_idx_map.get(vid), deterministic=True
-                        )
-
-                obs, rewards, team_reward, done, info = env.step(actions)
-                if "min_cpa" in info:
-                    cpa_list.append(info["min_cpa"])
-
-            safety_score = compute_safety_score(cpa_list)
-            sweep_results[alg].append(safety_score)
-            print(f"      Lambda = {lam:.1f} -> Safety Score J(lambda): {safety_score:.3f}")
+        # Uses the same true-per-episode-minimum-pairwise-distance safety
+        # metric as scripts/generate_ieee_figures.py's resilience benchmark
+        # (see _eval_common.run_degradation_sweep's docstring) -- this used
+        # to average every per-step *projected* CPA across the whole
+        # episode instead, which reads near-zero in the instant just before
+        # a rudder command actually changes heading regardless of how the
+        # real trajectory turns out, saturating every algorithm's score.
+        scores_per_level = run_degradation_sweep(
+            config,
+            lambda alg=alg: factory.create(alg),
+            degradation_levels,
+            eval_seeds,
+            make_select_action(alg),
+        )
+        sweep_results[alg] = [float(np.mean(seed_scores)) for seed_scores in scores_per_level]
+        for lam, score in zip(degradation_levels, sweep_results[alg]):
+            print(f"      Lambda = {lam:.1f} -> Safety Score J(lambda): {score:.3f}")
 
         r_idx = compute_resilience_index(degradation_levels, sweep_results[alg])
         resilience_indices[alg] = r_idx

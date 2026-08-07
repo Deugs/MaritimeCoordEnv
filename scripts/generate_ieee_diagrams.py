@@ -119,7 +119,7 @@ def render_fig1_system_architecture():
     ax.text(
         0.50,
         0.70,
-        "• ITU-R M.1371 AIS Noise\n• 5x5 Extended Kalman Filter\n"
+        "• ITU-R M.1371 AIS Noise\n• 6x6 Extended Kalman Filter\n"
         "• JPDA Track Association\n• Blackout Dead Reckoning",
         ha="center",
         va="center",
