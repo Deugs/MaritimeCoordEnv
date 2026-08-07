@@ -75,9 +75,16 @@ def main():
 
     degradation_levels = np.linspace(0.0, 1.0, 6)  # 0.0 (total loss) to 1.0 (full comms)
     eval_seeds = [100, 101, 102, 103, 104]
+    # Each variant is retrained independently under 4 seeds (42/100/200/300); the
+    # reported mean/std below is the across-training-seed variance (does the ablation
+    # finding replicate across independently trained models), not merely the
+    # within-checkpoint episode-to-episode variance eval_seeds captures.
+    train_seeds = [42, 100, 200, 300]
 
     ablation_results = {v: [] for v in variants}
     ablation_stds = {v: [] for v in variants}
+    ablation_resilience_mean = {}
+    ablation_resilience_std = {}
 
     config = MaritimeExperimentConfig(scenario_type="head_on", n_vessels=2, episode_length=500)
 
@@ -85,50 +92,71 @@ def main():
     for var in variants:
         print(f"\n---> Evaluating Variant: {labels[var]}")
 
-        # Instantiate policy objects
-        if var in ["marlin_twin", "ablation_no_digital_twin"]:
-            pols = {i: GATPolicy() for i in range(2)}
-        elif var == "ablation_mean_pooling":
-            pols = {i: MeanPoolingPolicy() for i in range(2)}
-        elif var == "ablation_flat_mlp":
-            pols = {i: MLPPolicy() for i in range(2)}
+        def make_policies_factory(var, train_seed):
+            def factory():
+                if var in ["marlin_twin", "ablation_no_digital_twin"]:
+                    pols = {i: GATPolicy() for i in range(2)}
+                elif var == "ablation_mean_pooling":
+                    pols = {i: MeanPoolingPolicy() for i in range(2)}
+                elif var == "ablation_flat_mlp":
+                    pols = {i: MLPPolicy() for i in range(2)}
 
-        # Load trained PyTorch checkpoint if available
-        ckpt_path = os.path.join(REPO_ROOT, "checkpoints", f"{var}_seed_42.pt")
-        if os.path.exists(ckpt_path):
-            ckpt_data = torch.load(ckpt_path, weights_only=True)
-            for i in range(2):
-                if i in ckpt_data:
-                    try:
-                        pols[i].set_state(ckpt_data[i])
-                    except Exception as e:
-                        logger.warning(
-                            f"Failed to load checkpoint state for {var} vessel {i} from "
-                            f"{ckpt_path}: {e}. Evaluating with an untrained policy instead."
-                        )
+                ckpt_path = os.path.join(REPO_ROOT, "checkpoints", f"{var}_seed_{train_seed}.pt")
+                if os.path.exists(ckpt_path):
+                    ckpt_data = torch.load(ckpt_path, weights_only=True)
+                    for i in range(2):
+                        if i in ckpt_data:
+                            try:
+                                pols[i].set_state(ckpt_data[i])
+                            except Exception as e:
+                                logger.warning(
+                                    f"Failed to load checkpoint state for {var} vessel {i} "
+                                    f"from {ckpt_path}: {e}. Evaluating with an untrained "
+                                    "policy instead."
+                                )
+                return pols
+
+            return factory
 
         def select_action(env, vid, policy, agent_obs, graph, node_idx):
             wrapper = VesselAgentWrapper(env.get_scene().vessels[vid], policy)
             return wrapper.select_action(agent_obs, graph, node_idx, deterministic=True)
 
-        scores_per_level = run_degradation_sweep(
-            config,
-            lambda: pols,
-            degradation_levels,
-            eval_seeds,
-            select_action,
-            disable_digital_twin=(var == "ablation_no_digital_twin"),
+        per_train_seed_curves = []
+        per_train_seed_resilience = []
+        for train_seed in train_seeds:
+            scores_per_level = run_degradation_sweep(
+                config,
+                make_policies_factory(var, train_seed),
+                degradation_levels,
+                eval_seeds,
+                select_action,
+                disable_digital_twin=(var == "ablation_no_digital_twin"),
+            )
+            curve = [float(np.mean(seed_scores)) for seed_scores in scores_per_level]
+            per_train_seed_curves.append(curve)
+            per_train_seed_resilience.append(
+                compute_resilience_index(list(degradation_levels), curve)
+            )
+
+        curves_arr = np.array(per_train_seed_curves)  # [n_train_seeds, n_levels]
+        ablation_results[var] = curves_arr.mean(axis=0).tolist()
+        ablation_stds[var] = curves_arr.std(axis=0).tolist()
+        ablation_resilience_mean[var] = float(np.mean(per_train_seed_resilience))
+        ablation_resilience_std[var] = float(np.std(per_train_seed_resilience))
+
+        for lam, mean_score, std_score in zip(
+            degradation_levels, ablation_results[var], ablation_stds[var]
+        ):
+            print(
+                f"      Lambda = {lam:.1f} -> Safety Score: {mean_score:.4f} +/- "
+                f"{std_score:.4f} (across {len(train_seeds)} training seeds)"
+            )
+
+        print(
+            f"      Coordination Resilience Index (R_resilience) = "
+            f"{ablation_resilience_mean[var]:.4f} +/- {ablation_resilience_std[var]:.4f}"
         )
-
-        for lam, seed_scores in zip(degradation_levels, scores_per_level):
-            mean_score = float(np.mean(seed_scores))
-            std_score = float(np.std(seed_scores))
-            ablation_results[var].append(mean_score)
-            ablation_stds[var].append(std_score)
-            print(f"      Lambda = {lam:.1f} -> Safety Score: {mean_score:.3f} +/- {std_score:.3f}")
-
-        resilience_index = compute_resilience_index(list(degradation_levels), ablation_results[var])
-        print(f"      Coordination Resilience Index (R_resilience) = {resilience_index:.3f}")
 
     print("\n2. Plotting Publication-Quality IEEE Ablation Curves...")
     fig, ax = plt.subplots(figsize=(7.5, 4.8))

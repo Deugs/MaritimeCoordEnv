@@ -589,9 +589,17 @@ def _make_policy(model: str, n_vessels: int):
 def render_fig9_benchmark_resilience() -> dict:
     """Figure 9: Real Baseline Algorithm Resilience Index Comparison -- computed via the
     same real degradation sweep + compute_resilience_index used by run_ablation_study.py
-    and run_full_evaluation_suite.py, not hardcoded per-algorithm constants."""
+    and run_full_evaluation_suite.py, not hardcoded per-algorithm constants.
+
+    Each trained model (not rule_based, which has no learned parameters) is evaluated
+    across 4 independent training seeds (42/100/200/300, all already present as
+    `checkpoints/{model}_seed_{seed}.pt`) rather than a single seed=42 checkpoint, so
+    the reported safety score and resilience index are a mean +/- std across seeds --
+    one training run's outcome is not reported as if it were the only possible one.
+    """
     degradation_levels = [1.0, 0.8, 0.6, 0.4, 0.2, 0.0]
     eval_seeds = [100, 101]
+    train_seeds = [42, 100, 200, 300]
     models = ["marlin_twin", "independent_ppo", "maddpg", "rule_based"]
     model_labels = {
         "marlin_twin": "MARLIN-Twin (GAT)",
@@ -609,12 +617,12 @@ def render_fig9_benchmark_resilience() -> dict:
 
     config = MaritimeExperimentConfig(scenario_type="head_on", n_vessels=2, episode_length=500)
 
-    def make_policies_factory(model):
+    def make_policies_factory(model, train_seed):
         def factory():
             if model == "rule_based":
                 return {i: RuleBasedCOLREGsController(i) for i in range(2)}
             pols = {i: _make_policy(model, n_vessels=2) for i in range(2)}
-            ckpt = os.path.join(REPO_ROOT, "checkpoints", f"{model}_seed_42.pt")
+            ckpt = os.path.join(REPO_ROOT, "checkpoints", f"{model}_seed_{train_seed}.pt")
             if os.path.exists(ckpt):
                 data = torch.load(ckpt, weights_only=True)
                 for i in range(2):
@@ -639,47 +647,64 @@ def render_fig9_benchmark_resilience() -> dict:
         wrapper = VesselAgentWrapper(env.get_scene().vessels[vid], policy)
         return wrapper.select_action(agent_obs, graph, node_idx, deterministic=True)
 
-    results = {}
-    resilience_indices = {}
+    curve_mean = {}
+    curve_std = {}
+    resilience_mean = {}
+    resilience_std = {}
     for model in models:
-        scores_per_level = run_degradation_sweep(
-            config,
-            make_policies_factory(model),
-            degradation_levels,
-            eval_seeds,
-            lambda env, vid, policy, agent_obs, graph, node_idx, model=model: select_action(
-                env, vid, policy, agent_obs, model, graph, node_idx
-            ),
-        )
-        results[model] = [float(np.mean(seed_scores)) for seed_scores in scores_per_level]
-        resilience_indices[model] = compute_resilience_index(degradation_levels, results[model])
+        seeds_to_run = [None] if model == "rule_based" else train_seeds
+        per_seed_curves = []
+        per_seed_resilience = []
+        for train_seed in seeds_to_run:
+            scores_per_level = run_degradation_sweep(
+                config,
+                make_policies_factory(model, train_seed),
+                degradation_levels,
+                eval_seeds,
+                lambda env, vid, policy, agent_obs, graph, node_idx, model=model: select_action(
+                    env, vid, policy, agent_obs, model, graph, node_idx
+                ),
+            )
+            curve = [float(np.mean(seed_scores)) for seed_scores in scores_per_level]
+            per_seed_curves.append(curve)
+            per_seed_resilience.append(compute_resilience_index(degradation_levels, curve))
+        curves_arr = np.array(per_seed_curves)
+        curve_mean[model] = curves_arr.mean(axis=0).tolist()
+        curve_std[model] = curves_arr.std(axis=0).tolist()
+        resilience_mean[model] = float(np.mean(per_seed_resilience))
+        resilience_std[model] = float(np.std(per_seed_resilience))
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(7.16, 3.2))
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(7.16, 3.6))
 
     for m in models:
-        ax1.plot(
+        ax1.errorbar(
             degradation_levels,
-            results[m],
-            styles[m],
+            curve_mean[m],
+            yerr=curve_std[m],
+            fmt=styles[m],
             color=colors[m],
             lw=2.0,
+            capsize=2.5,
             label=model_labels[m],
         )
     ax1.axhline(0.70, color="gray", linestyle=":", label="Sub-Linear Threshold (0.70)")
-    ax1.set_title("Safety Score J(lambda) vs Degradation", fontweight="bold")
+    ax1.set_title("Safety Score $J(\\lambda)$ vs Degradation", fontweight="bold", fontsize=9.0)
     ax1.set_xlabel("Communication Quality (lambda)")
     ax1.set_ylabel("Safety Score J(lambda)")
     ax1.set_xlim(1.05, -0.05)
     ax1.grid(True, linestyle="--", alpha=0.5)
-    ax1.legend(loc="lower left", fontsize=7.5)
+    ax1.legend(loc="lower left", fontsize=7.0)
 
     names = [model_labels[m] for m in models]
     cols = [colors[m] for m in models]
-    vals = [resilience_indices[m] for m in models]
-    bars = ax2.bar(names, vals, color=cols)
-    ax2.set_title("Coordination Resilience Index (R_resilience)", fontweight="bold")
+    vals = [resilience_mean[m] for m in models]
+    errs = [resilience_std[m] for m in models]
+    bars = ax2.bar(names, vals, yerr=errs, capsize=4, color=cols)
+    ax2.set_title("Coordination Resilience Index", fontweight="bold", fontsize=9.0)
     ax2.set_ylabel("Resilience Index R_resilience")
     ax2.set_ylim(0.0, 1.2)
+    ax2.set_xticks(range(len(names)))
+    ax2.set_xticklabels(names, rotation=20, ha="right", fontsize=7.0)
     ax2.grid(True, axis="y", linestyle="--", alpha=0.5)
     for bar in bars:
         h = bar.get_height()
@@ -693,10 +718,15 @@ def render_fig9_benchmark_resilience() -> dict:
             fontweight="bold",
         )
 
-    plt.tight_layout()
+    plt.tight_layout(w_pad=3.0)
     save_fig_all_formats("fig9_benchmark_resilience_ieee")
 
-    return {"safety_scores": results, "resilience_indices": resilience_indices}
+    return {
+        "safety_score_mean": curve_mean,
+        "safety_score_std": curve_std,
+        "resilience_mean": resilience_mean,
+        "resilience_std": resilience_std,
+    }
 
 
 def render_fig10_extended_training(n_seeds: int = 3, total_episodes: int = 200) -> dict:
