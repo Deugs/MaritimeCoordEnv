@@ -17,6 +17,7 @@ from marlin_twin.training.maddpg import MADDPGTrainer
 from marlin_twin.agents.policies import GATPolicy, MeanPoolingPolicy, MLPPolicy
 from marlin_twin.baselines.independent_ppo import IndependentPPOPolicy
 from marlin_twin.baselines.maddpg import MADDPGPolicy
+from marlin_twin.utils.seeding import seed_everything
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -30,6 +31,14 @@ def retrain_variant(variant_name: str, seeds: list[int], n_episodes: int = 250):
 
     for seed in seeds:
         print(f"\n---> [{variant_name}] Training Seed {seed} for {n_episodes} Episodes...")
+        # Must happen before ANY policy network is constructed below -- torch's
+        # default nn.Linear/etc. init draws from the global RNG, and without an
+        # explicit per-seed reseed here, every "seed" was previously a no-op:
+        # different filenames, but (for every variant except marlin_twin, whose
+        # heavier GATPolicy init happened to consume enough extra global-RNG
+        # draws to accidentally diverge) bit-identical initial weights and thus
+        # bit-identical trained checkpoints across all 4 "independent" seeds.
+        seed_everything(seed)
         config = MaritimeExperimentConfig(
             scenario_type="head_on",
             n_vessels=2,
