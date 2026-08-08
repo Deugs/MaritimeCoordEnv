@@ -50,6 +50,7 @@ from marlin_twin.baselines.rule_based import RuleBasedCOLREGsController  # noqa:
 from marlin_twin.training.mappo import _build_scene_graph  # noqa: E402
 from marlin_twin.training.curriculum import TwoStageCurriculumTrainer  # noqa: E402
 from marlin_twin.utils.metrics import compute_resilience_index  # noqa: E402
+from marlin_twin.utils.seeding import seed_everything  # noqa: E402
 from marlin_twin.data_classes import VesselAction  # noqa: E402
 
 import sys  # noqa: E402
@@ -866,6 +867,11 @@ def render_fig10_extended_training(n_seeds: int = 3, total_episodes: int = 200) 
     all_histories = []
 
     for seed in seeds:
+        # Without this, each seed's run is not actually tied to its own seed
+        # value -- it just inherits whatever RNG state the previous loop
+        # iteration's training happened to leave behind, so results would
+        # silently change if this seed list were reordered or resized.
+        seed_everything(seed)
         config = MaritimeExperimentConfig(
             scenario_type="head_on", n_vessels=2, n_episodes=total_episodes, episode_length=500
         )

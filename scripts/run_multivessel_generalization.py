@@ -24,6 +24,7 @@ from loguru import logger
 
 from marlin_twin.data_classes import MaritimeExperimentConfig
 from marlin_twin.envs.maritime_coord_env import MaritimeCoordEnv
+from marlin_twin.utils.seeding import seed_everything
 from marlin_twin.training.curriculum import TwoStageCurriculumTrainer
 from marlin_twin.agents.policies import GATPolicy, MLPPolicy
 from marlin_twin.agents.vessel_agent import VesselAgentWrapper
@@ -53,6 +54,12 @@ def checkpoint_path(variant: str, seed: int) -> str:
 
 
 def train_variant(variant: str, seed: int) -> None:
+    # Must precede policy construction -- see run_retrain_all_baselines.py's
+    # retrain_variant for why this was missing and what it silently broke
+    # (every "seed" was a no-op: identical initial weights, identical
+    # training, bit-identical checkpoints across all 4 seeds for every
+    # variant that didn't happen to consume extra incidental RNG draws).
+    seed_everything(seed)
     config = MaritimeExperimentConfig(
         scenario_type=SCENARIO,
         n_vessels=N_VESSELS,
