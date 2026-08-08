@@ -99,28 +99,35 @@ class ScenarioGenerator:
                 # unpaired vessel (odd n_vessels) gets role 0 of its own
                 # lane — a neutral leg with no forced encounter, not an error.
                 #
-                # Separation of 800m/side (1600m gap) -- not the original
-                # 2000m/side (4000m gap). After fixing VesselDynamics'
-                # thrust_coefficient/yaw_coefficient (see their docstrings),
-                # this vessel class's realistic yaw response takes on the
-                # order of 1000s to develop meaningfully; a 4000m gap at
-                # ~8-9 m/s cruise closes in ~250s, giving nowhere near
-                # enough post-avoidance-decision time within an
-                # RL-episode-length window for a turn to create any real
-                # separation (empirically confirmed: true minimum pairwise
-                # distance was 0m regardless of communication degradation
-                # level, at every episode_length up to 1500s, at the
-                # original 4000m gap). The tighter 1600m gap reliably
-                # produces a real ~90-100m closest approach with a
-                # rule-based avoidance policy within a 400-600 step episode.
+                # Separation of 150m/side (300m gap) -- not the earlier
+                # 800m/side (1600m gap). That 1600m gap was tuned for the
+                # CARGO/USV N_r/yaw_coefficient values in place before the
+                # IMO turning-circle fix (see VesselDynamics.N_r's
+                # docstring), whose yaw response took on the order of
+                # 1000s to develop meaningfully. The fix raised both by
+                # several orders of magnitude specifically so the vessel
+                # can turn tightly enough to meet the 5*L turning-circle
+                # ceiling, which also means it can react to an oncoming
+                # vessel almost immediately -- at the old 1600m gap, every
+                # policy (including Rule-Based COLREGs) now starts
+                # avoiding early enough to clear 1000m+ of separation,
+                # saturating `compute_safety_score`'s 1000m-normalized
+                # ceiling for every method and destroying its ability to
+                # differentiate them (empirically confirmed: true minimum
+                # pairwise distance exceeded 1250m for both Rule-Based and
+                # MARLIN-Twin at the old gap under the corrected dynamics).
+                # The tighter 300m gap reliably reproduces a real ~100-150m
+                # closest approach with a rule-based avoidance policy
+                # within a 400-600 step episode, restoring real dynamic
+                # range to the safety score under the corrected dynamics.
                 pair_idx, role = i // 2, i % 2
-                lane_x = pair_idx * 800.0
+                lane_x = pair_idx * 150.0
                 if role == 0:
-                    start_x, start_y, heading = lane_x, -800.0, 0.0  # Heading North
-                    target_x, target_y = lane_x, 800.0
+                    start_x, start_y, heading = lane_x, -150.0, 0.0  # Heading North
+                    target_x, target_y = lane_x, 150.0
                 else:
-                    start_x, start_y, heading = lane_x, 800.0, np.pi  # Heading South
-                    target_x, target_y = lane_x, -800.0
+                    start_x, start_y, heading = lane_x, 150.0, np.pi  # Heading South
+                    target_x, target_y = lane_x, -150.0
             elif scenario_type == "crossing_give_way" and n_vessels >= 2:
                 # Same pair-grouping as head_on, offset diagonally per pair so
                 # each pair's crossing point is spatially distinct.
