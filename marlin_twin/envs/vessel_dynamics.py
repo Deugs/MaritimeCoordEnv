@@ -238,21 +238,31 @@ class MMGDynamicsSolver:
             trajectory.append(state)
             heading_history.append(state.heading)
 
-            rel_heading = abs((state.heading - trajectory[0].heading + np.pi) % (2 * np.pi) - np.pi)
+            # Signed, wrap-corrected relative heading -- `state.heading` is
+            # wrapped to [-pi, pi] every step (see `step()`), so a raw
+            # `state.heading - trajectory[0].heading` difference (used here
+            # in an earlier version of this method for the phase 2/3 exit
+            # checks) breaks discontinuously the moment a fast-turning
+            # vessel's true relative heading passes +-180 degrees -- exactly
+            # the regime a vessel tight enough to meet the IMO turning-circle
+            # criterion operates in. Compute it once, signed, and reuse it
+            # for every phase's crossing check.
+            rel_signed = (state.heading - trajectory[0].heading + np.pi) % (2 * np.pi) - np.pi
+            rel_heading = abs(rel_signed)
             max_heading_phase = max(max_heading_phase, rel_heading)
 
-            if phase == 1 and rel_heading >= target_heading_change:
+            if phase == 1 and rel_signed >= target_heading_change:
                 # First execute completed, reverse rudder
                 current_rudder = -angle_rad
                 phase = 2
             elif phase == 2:
-                if (state.heading - trajectory[0].heading) <= -target_heading_change:
+                if rel_signed <= -target_heading_change:
                     overshoots.append(float(np.degrees(max_heading_phase - target_heading_change)))
                     current_rudder = angle_rad
                     phase = 3
                     max_heading_phase = 0.0
             elif phase == 3:
-                if (state.heading - trajectory[0].heading) >= target_heading_change:
+                if rel_signed >= target_heading_change:
                     overshoots.append(float(np.degrees(max_heading_phase - target_heading_change)))
                     phase = 4
 

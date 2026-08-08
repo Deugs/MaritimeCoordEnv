@@ -29,12 +29,12 @@ def test_turning_circle_sea_trial():
 
 
 def test_zigzag_sea_trial():
-    # A CARGO-scale vessel's yaw response to a 10 deg rudder is slow
-    # (empirically confirmed to need ~19700s to complete both overshoots
-    # at this duration/dt after fixing the double-RPM-scaling thrust bug,
-    # see VesselDynamics.thrust_coefficient); USV converges within ~8000s
-    # with its own correctly-calibrated thrust_coefficient, keeping this
-    # test faster while still exercising a real completed maneuver.
+    # Converges within ~200s at this vessel's cruise speed under the
+    # IMO-criteria-verified N_r/yaw_coefficient (see VesselDynamics.N_r's
+    # docstring) -- duration=8000.0 below is generous headroom, not a
+    # requirement; it predates that fix, when this vessel's much weaker
+    # yaw response needed on the order of that long to complete both
+    # overshoots.
     usv_profile = VESSEL_PROFILES[VesselType.USV]
     dynamics = VesselDynamics(
         vessel_id=0,

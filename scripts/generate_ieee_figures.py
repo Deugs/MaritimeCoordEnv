@@ -5,13 +5,13 @@ Re-renders all empirical performance charts matching IEEE Transactions publicati
 300 DPI, colorblind-friendly palette, sans-serif typography, and standard column widths.
 
 Every figure below is computed from a real run of this codebase's own solvers/estimators/
-policies -- none of the values are hand-picked placeholders. Where a figure's title claims
-"real-world" data (fig11), that claim is now honest: this repository has no real NOAA/AIS
-dataset anywhere in it (confirmed by inspecting `marlin_twin/data/ais_loader.py`, which only
-ever generates a synthetic sample trajectory), so fig11 is now explicitly labeled as a
-simulated trajectory rather than falsely claiming real-world provenance. fig3 (GAT attention)
-is a real forward pass of a trained checkpoint on a constructed-but-verified encounter scene,
-not a hand-drawn illustration with invented weights.
+policies -- none of the values are hand-picked placeholders. fig11 uses a genuine NOAA
+MarineCadastre AIS trajectory (`marlin_twin/data/real_ais_sample.csv`, 48 real position
+reports for a real vessel -- see `ais_loader.py`'s module docstring for full provenance),
+not a simulated one; fig6 still uses a simulated MMG-solver trajectory (a different,
+complementary demonstration of the same EKF/blackout mechanism, not claimed as real-world).
+fig3 (GAT attention) is a real forward pass of a trained checkpoint on a
+constructed-but-verified encounter scene, not a hand-drawn illustration with invented weights.
 
 Usage:
     python scripts/generate_ieee_figures.py
@@ -278,19 +278,23 @@ def render_fig5_sea_trials() -> dict:
     # rudder angle to it, so a caller passing 35.0 here was silently
     # simulating a 30 deg turn while every caption/label claimed 35 deg.
     #
-    # duration=1200/3200 -- after fixing the double-RPM-scaling thrust bug and
-    # deriving a real yaw_coefficient from each type's own turning_circle
-    # (see VesselDynamics.thrust_coefficient/yaw_coefficient), this vessel
-    # takes ~1000s to complete one full turning-circle loop and ~3000s to
-    # complete two zigzag overshoots; the old duration=400/6000 defaults
-    # predate both fixes and never converged under the corrected dynamics
-    # (see run_turning_circle_test's loop_completed / run_zigzag_test's
-    # *_converged flags -- always check them rather than trusting a
-    # returned number blindly).
+    # duration=1200/500 -- after raising CARGO's N_r/yaw_coefficient to meet
+    # the IMO Res. MSC.137(76) 5*L turning-circle ceiling (see
+    # VesselDynamics.N_r's docstring), this vessel completes a full
+    # turning-circle loop in ~60s and both zig-zag overshoots by ~250s;
+    # `run_zigzag_test` only ever executes 2 rudder reversals and then holds
+    # the rudder fixed for the rest of `duration` (by design -- it measures
+    # exactly the two IMO-specified overshoots, nothing past them), so a
+    # duration much longer than needed to reach the second overshoot would
+    # plot an extended stretch of the vessel simply circling under that
+    # held rudder -- correct behavior, but a needlessly confusing zig-zag
+    # figure. duration=500 leaves a clean settle after the second overshoot
+    # without running into that.
     tc_result = solver.run_turning_circle_test(rudder_angle_deg=30.0, duration=1200.0)
-    zz_result = solver.run_zigzag_test(angle_deg=10.0, duration=2900.0)
+    zz_result = solver.run_zigzag_test(angle_deg=10.0, duration=500.0)
     assert tc_result["loop_completed"], "turning circle did not complete a full loop"
     assert zz_result["first_overshoot_converged"], "zigzag did not converge"
+    assert zz_result["second_overshoot_converged"], "zigzag second overshoot did not converge"
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(7.16, 3.2))
 
@@ -310,9 +314,39 @@ def render_fig5_sea_trials() -> dict:
     ax1.grid(True, linestyle="--", alpha=0.5)
     ax1.legend(loc="lower right")
 
+    # `run_zigzag_test` only executes the 2 rudder reversals the IMO 10/10
+    # test itself calls for, then intentionally holds the rudder fixed at
+    # +10 deg for the rest of `duration` (see the comment above) -- so
+    # everything after the second overshoot's recovery is just the vessel
+    # continuing to turn, unremarkably, under that held rudder. Plotting
+    # that stretch would show heading sweeping repeatedly through +-180 deg
+    # as it laps its own turning circle, which reads as runaway divergence
+    # to a reader even though it is correct, expected behavior for a fixed
+    # rudder input -- so the plot is cut shortly after the recovery through
+    # the +10 deg band following the second overshoot's trough, once
+    # heading is unambiguously past the zig-zag band and headed for that
+    # same unremarkable lap rather than a third reversal.
+    # Re-walk the same 3-phase state machine `run_zigzag_test` itself uses
+    # (angle_deg=10 target) purely to find where phase 3 exits -- i.e. where
+    # the second overshoot's recovery crosses back through +10 deg -- so
+    # the cutoff below is anchored to that specific event rather than a
+    # magnitude threshold, which the later held-rudder laps would also
+    # cross repeatedly.
     zz_traj = zz_result["trajectory"]
-    t_sec = np.arange(len(zz_traj))
-    heading_deg = [np.degrees(s.heading) for s in zz_traj]
+    heading_deg_full = [np.degrees(s.heading) for s in zz_traj]
+    target_deg = 10.0
+    phase, cutoff_idx = 1, len(heading_deg_full)
+    for i, h in enumerate(heading_deg_full):
+        if phase == 1 and h >= target_deg:
+            phase = 2
+        elif phase == 2 and h <= -target_deg:
+            phase = 3
+        elif phase == 3 and h >= target_deg:
+            cutoff_idx = i
+            break
+    plot_end = min(cutoff_idx + 15, len(heading_deg_full))
+    t_sec = np.arange(plot_end)
+    heading_deg = heading_deg_full[:plot_end]
     ax2.plot(t_sec, heading_deg, "b-", lw=2.0, label="Heading Angle (deg)")
     ax2.axhline(10.0, color="r", linestyle="--", lw=1.2, label="Rudder Target (+/-10 deg)")
     ax2.axhline(-10.0, color="r", linestyle="--", lw=1.2)
@@ -418,6 +452,93 @@ def _run_blackout_digital_twin(seed: int, n_steps: int = 120, dt: float = 10.0) 
     }
 
 
+def _run_real_ais_digital_twin(outage_duration_s: float = 300.0) -> dict:
+    """Drives the EKF/JPDA DigitalTwinEstimator over a real NOAA MarineCadastre AIS
+    trajectory (`marlin_twin/data/real_ais_sample.csv` -- see `ais_loader.py`'s module
+    docstring for full provenance), with a simulated communication blackout injected
+    over the middle third of the run. Unlike `_run_blackout_digital_twin`, the "true"
+    trajectory here is real recorded vessel positions, not an MMG-solver rollout: the
+    real AIS reports themselves stand in for ground truth (as is standard practice
+    validating against AIS data, since consumer-grade GPS position accuracy is well
+    within the meters-scale noise already added on top here), and reporting intervals
+    are real and irregular (~61-71s apart), not a fixed simulation dt.
+    """
+    from marlin_twin.data.ais_loader import AISDataLoader
+
+    csv_path = os.path.join(REPO_ROOT, "marlin_twin", "data", "real_ais_sample.csv")
+    df = AISDataLoader.load_ais_csv(csv_path)
+    true_states = AISDataLoader.convert_to_vessel_states(df, vessel_id=1)
+    elapsed = AISDataLoader.elapsed_seconds(df)
+
+    total_span = elapsed[-1] - elapsed[0]
+    outage_start_s = elapsed[0] + total_span / 3.0
+    outage_end_s = outage_start_s + outage_duration_s
+
+    estimator = DigitalTwinEstimator()
+    rng = np.random.default_rng(11)
+    true_xs, true_ys, est_xs, est_ys, outage_mask = [], [], [], [], []
+
+    for i, state in enumerate(true_states):
+        t = elapsed[i]
+        true_xs.append(state.x)
+        true_ys.append(state.y)
+
+        is_outage = outage_start_s <= t <= outage_end_s
+        outage_mask.append(is_outage)
+
+        ais_readings = {}
+        if not is_outage:
+            meas_pos = state.position() + rng.normal(0, 5.0, 2)
+            ais_readings[1] = AISReading(
+                vessel_id=1,
+                timestamp=t,
+                reported_position=meas_pos,
+                reported_heading=state.heading,
+                reported_speed=state.speed,
+            )
+
+        twin = estimator.update(
+            scene_id="real_ais_scene",
+            timestamp=t,
+            actual_states={1: state},
+            ais_readings=ais_readings,
+            radar_tracks=[],
+        )
+        est_state = twin.vessel_estimates[1].estimated_state
+        est_xs.append(est_state.x)
+        est_ys.append(est_state.y)
+
+    true_xs = np.array(true_xs)
+    true_ys = np.array(true_ys)
+    est_xs = np.array(est_xs)
+    est_ys = np.array(est_ys)
+    outage_mask = np.array(outage_mask)
+    time_axis = np.array(elapsed)
+
+    pos_errors = np.sqrt((true_xs - est_xs) ** 2 + (true_ys - est_ys) ** 2)
+    overall_rmse = float(np.sqrt(np.mean(pos_errors**2)))
+    blackout_rmse = (
+        float(np.sqrt(np.mean(pos_errors[outage_mask] ** 2))) if outage_mask.any() else float("nan")
+    )
+
+    return {
+        "true_xs": true_xs,
+        "true_ys": true_ys,
+        "est_xs": est_xs,
+        "est_ys": est_ys,
+        "outage_mask": outage_mask,
+        "time_axis": time_axis,
+        "pos_errors": pos_errors,
+        "overall_rmse": overall_rmse,
+        "blackout_rmse": blackout_rmse,
+        "outage_start_s": outage_start_s,
+        "outage_end_s": outage_end_s,
+        "n_points": len(true_states),
+        "vessel_name": str(df["VesselName"].iloc[0]),
+        "mmsi": str(df["MMSI"].iloc[0]),
+    }
+
+
 def render_fig6_digital_twin_blackout() -> dict:
     """Figure 6: EKF/JPDA Digital Twin Estimation during a real simulated 300s Blackout."""
     result = _run_blackout_digital_twin(seed=7)
@@ -455,20 +576,22 @@ def render_fig6_digital_twin_blackout() -> dict:
 
 
 def render_fig11_real_ais_validation() -> dict:
-    """Figure 11: Digital Twin validation on a simulated AIS trajectory during a 300s
-    blackout. Labeled honestly -- this repo has no real-world AIS dataset (see module
-    docstring), so this is NOT claimed as real-world NOAA data."""
-    result = _run_blackout_digital_twin(seed=99)
+    """Figure 11: Digital Twin validation on a real NOAA MarineCadastre AIS trajectory
+    (48 real position reports, 2017-01-20, vessel "EARLY DAWN") with a simulated 300s
+    communication blackout injected -- see `ais_loader.py`'s module docstring and
+    `marlin_twin/data/real_ais_sample.csv` for full data provenance. This is genuine
+    real-world AIS telemetry, not a simulated trajectory."""
+    result = _run_real_ais_digital_twin()
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(7.16, 3.2))
 
     om = result["outage_mask"]
-    ax1.plot(result["true_ys"], result["true_xs"], "k-", lw=2, label="Ground-Truth Trajectory")
+    ax1.plot(result["true_ys"], result["true_xs"], "k-", lw=2, label="Real AIS Trajectory")
     ax1.plot(
         result["est_ys"], result["est_xs"], "b--", lw=2, label="EKF/JPDA Digital Twin Estimate"
     )
     ax1.plot(result["est_ys"][om], result["est_xs"][om], "r.", label="AIS Outage (Dead Reckoning)")
-    ax1.set_title("Simulated AIS Trajectory Tracking", fontweight="bold")
+    ax1.set_title("Real AIS Trajectory Tracking", fontweight="bold")
     ax1.set_xlabel("East (y) [meters]")
     ax1.set_ylabel("North (x) [meters]")
     ax1.grid(True, linestyle="--", alpha=0.5)
@@ -482,7 +605,7 @@ def render_fig11_real_ais_validation() -> dict:
         alpha=0.15,
         label="AIS Blackout",
     )
-    ax2.set_title("Simulated AIS Tracking Position Error", fontweight="bold")
+    ax2.set_title("Real AIS Tracking Position Error", fontweight="bold")
     ax2.set_xlabel("Time [seconds]")
     ax2.set_ylabel("Position Error [meters]")
     ax2.grid(True, linestyle="--", alpha=0.5)
@@ -491,7 +614,13 @@ def render_fig11_real_ais_validation() -> dict:
     plt.tight_layout()
     save_fig_all_formats("fig11_real_ais_validation_ieee")
 
-    return {"overall_rmse": result["overall_rmse"], "blackout_rmse": result["blackout_rmse"]}
+    return {
+        "overall_rmse": result["overall_rmse"],
+        "blackout_rmse": result["blackout_rmse"],
+        "n_points": result["n_points"],
+        "vessel_name": result["vessel_name"],
+        "mmsi": result["mmsi"],
+    }
 
 
 def render_fig8_degradation_heatmap() -> dict:
@@ -589,9 +718,17 @@ def _make_policy(model: str, n_vessels: int):
 def render_fig9_benchmark_resilience() -> dict:
     """Figure 9: Real Baseline Algorithm Resilience Index Comparison -- computed via the
     same real degradation sweep + compute_resilience_index used by run_ablation_study.py
-    and run_full_evaluation_suite.py, not hardcoded per-algorithm constants."""
+    and run_full_evaluation_suite.py, not hardcoded per-algorithm constants.
+
+    Each trained model (not rule_based, which has no learned parameters) is evaluated
+    across 4 independent training seeds (42/100/200/300, all already present as
+    `checkpoints/{model}_seed_{seed}.pt`) rather than a single seed=42 checkpoint, so
+    the reported safety score and resilience index are a mean +/- std across seeds --
+    one training run's outcome is not reported as if it were the only possible one.
+    """
     degradation_levels = [1.0, 0.8, 0.6, 0.4, 0.2, 0.0]
     eval_seeds = [100, 101]
+    train_seeds = [42, 100, 200, 300]
     models = ["marlin_twin", "independent_ppo", "maddpg", "rule_based"]
     model_labels = {
         "marlin_twin": "MARLIN-Twin (GAT)",
@@ -609,12 +746,12 @@ def render_fig9_benchmark_resilience() -> dict:
 
     config = MaritimeExperimentConfig(scenario_type="head_on", n_vessels=2, episode_length=500)
 
-    def make_policies_factory(model):
+    def make_policies_factory(model, train_seed):
         def factory():
             if model == "rule_based":
                 return {i: RuleBasedCOLREGsController(i) for i in range(2)}
             pols = {i: _make_policy(model, n_vessels=2) for i in range(2)}
-            ckpt = os.path.join(REPO_ROOT, "checkpoints", f"{model}_seed_42.pt")
+            ckpt = os.path.join(REPO_ROOT, "checkpoints", f"{model}_seed_{train_seed}.pt")
             if os.path.exists(ckpt):
                 data = torch.load(ckpt, weights_only=True)
                 for i in range(2):
@@ -639,47 +776,64 @@ def render_fig9_benchmark_resilience() -> dict:
         wrapper = VesselAgentWrapper(env.get_scene().vessels[vid], policy)
         return wrapper.select_action(agent_obs, graph, node_idx, deterministic=True)
 
-    results = {}
-    resilience_indices = {}
+    curve_mean = {}
+    curve_std = {}
+    resilience_mean = {}
+    resilience_std = {}
     for model in models:
-        scores_per_level = run_degradation_sweep(
-            config,
-            make_policies_factory(model),
-            degradation_levels,
-            eval_seeds,
-            lambda env, vid, policy, agent_obs, graph, node_idx, model=model: select_action(
-                env, vid, policy, agent_obs, model, graph, node_idx
-            ),
-        )
-        results[model] = [float(np.mean(seed_scores)) for seed_scores in scores_per_level]
-        resilience_indices[model] = compute_resilience_index(degradation_levels, results[model])
+        seeds_to_run = [None] if model == "rule_based" else train_seeds
+        per_seed_curves = []
+        per_seed_resilience = []
+        for train_seed in seeds_to_run:
+            scores_per_level = run_degradation_sweep(
+                config,
+                make_policies_factory(model, train_seed),
+                degradation_levels,
+                eval_seeds,
+                lambda env, vid, policy, agent_obs, graph, node_idx, model=model: select_action(
+                    env, vid, policy, agent_obs, model, graph, node_idx
+                ),
+            )
+            curve = [float(np.mean(seed_scores)) for seed_scores in scores_per_level]
+            per_seed_curves.append(curve)
+            per_seed_resilience.append(compute_resilience_index(degradation_levels, curve))
+        curves_arr = np.array(per_seed_curves)
+        curve_mean[model] = curves_arr.mean(axis=0).tolist()
+        curve_std[model] = curves_arr.std(axis=0).tolist()
+        resilience_mean[model] = float(np.mean(per_seed_resilience))
+        resilience_std[model] = float(np.std(per_seed_resilience))
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(7.16, 3.2))
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(7.16, 3.6))
 
     for m in models:
-        ax1.plot(
+        ax1.errorbar(
             degradation_levels,
-            results[m],
-            styles[m],
+            curve_mean[m],
+            yerr=curve_std[m],
+            fmt=styles[m],
             color=colors[m],
             lw=2.0,
+            capsize=2.5,
             label=model_labels[m],
         )
     ax1.axhline(0.70, color="gray", linestyle=":", label="Sub-Linear Threshold (0.70)")
-    ax1.set_title("Safety Score J(lambda) vs Degradation", fontweight="bold")
+    ax1.set_title("Safety Score $J(\\lambda)$ vs Degradation", fontweight="bold", fontsize=9.0)
     ax1.set_xlabel("Communication Quality (lambda)")
     ax1.set_ylabel("Safety Score J(lambda)")
     ax1.set_xlim(1.05, -0.05)
     ax1.grid(True, linestyle="--", alpha=0.5)
-    ax1.legend(loc="lower left", fontsize=7.5)
+    ax1.legend(loc="lower left", fontsize=7.0)
 
     names = [model_labels[m] for m in models]
     cols = [colors[m] for m in models]
-    vals = [resilience_indices[m] for m in models]
-    bars = ax2.bar(names, vals, color=cols)
-    ax2.set_title("Coordination Resilience Index (R_resilience)", fontweight="bold")
+    vals = [resilience_mean[m] for m in models]
+    errs = [resilience_std[m] for m in models]
+    bars = ax2.bar(names, vals, yerr=errs, capsize=4, color=cols)
+    ax2.set_title("Coordination Resilience Index", fontweight="bold", fontsize=9.0)
     ax2.set_ylabel("Resilience Index R_resilience")
     ax2.set_ylim(0.0, 1.2)
+    ax2.set_xticks(range(len(names)))
+    ax2.set_xticklabels(names, rotation=20, ha="right", fontsize=7.0)
     ax2.grid(True, axis="y", linestyle="--", alpha=0.5)
     for bar in bars:
         h = bar.get_height()
@@ -693,10 +847,15 @@ def render_fig9_benchmark_resilience() -> dict:
             fontweight="bold",
         )
 
-    plt.tight_layout()
+    plt.tight_layout(w_pad=3.0)
     save_fig_all_formats("fig9_benchmark_resilience_ieee")
 
-    return {"safety_scores": results, "resilience_indices": resilience_indices}
+    return {
+        "safety_score_mean": curve_mean,
+        "safety_score_std": curve_std,
+        "resilience_mean": resilience_mean,
+        "resilience_std": resilience_std,
+    }
 
 
 def render_fig10_extended_training(n_seeds: int = 3, total_episodes: int = 200) -> dict:

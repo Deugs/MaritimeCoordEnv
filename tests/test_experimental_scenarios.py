@@ -57,15 +57,23 @@ def test_compute_colregs_violation_rate_is_a_real_fraction():
 
 
 def test_mappo_and_maddpg_evaluate_no_longer_return_hardcoded_stub_constants():
-    config = MaritimeExperimentConfig(scenario_type="head_on", n_vessels=2, episode_length=10)
+    # episode_length=13, n_episodes=3 -- denom = n_episodes * episode_length *
+    # n_vessels = 78, which 0.05 (the old hardcoded stub) cannot divide evenly
+    # into for any integer violation_count. A round episode_length=10/
+    # n_episodes=2 (denom=40) previously let a real, freshly computed
+    # violation_count of 2 coincidentally land exactly on the old stub value
+    # (2/40 == 0.05) once the vessel dynamics changed enough to shift the
+    # count -- an unrelated dynamics fix should not be able to flip this
+    # regression guard by coincidence.
+    config = MaritimeExperimentConfig(scenario_type="head_on", n_vessels=2, episode_length=13)
     env = MaritimeCoordEnv(config)
     policies = {0: RuleBasedCOLREGsController(0), 1: RuleBasedCOLREGsController(1)}
 
-    mappo_results = MAPPOTrainer(config).evaluate(env, policies, n_episodes=2)
+    mappo_results = MAPPOTrainer(config).evaluate(env, policies, n_episodes=3)
     assert mappo_results["efficiency_score"] != 0.85
     assert mappo_results["colregs_violation_rate"] != 0.05
 
-    maddpg_results = MADDPGTrainer(config).evaluate(env, policies, n_episodes=2)
+    maddpg_results = MADDPGTrainer(config).evaluate(env, policies, n_episodes=3)
     assert maddpg_results["efficiency_score"] != 0.85
     assert maddpg_results["colregs_violation_rate"] != 0.05
 
@@ -102,14 +110,16 @@ def test_crossing_alias_matches_crossing_give_way_exactly():
 
 
 def test_head_on_two_vessel_geometry_unchanged_from_before_generalization():
-    # Separation is intentionally 800m/side (1600m gap), not the original
-    # 2000m/side -- see scenarios.py's head_on branch for why: the original
-    # 4000m gap left no real post-avoidance-decision time within an
-    # RL-episode-length window once VesselDynamics' yaw response was fixed
-    # to be physically realistic (see thrust_coefficient/yaw_coefficient).
+    # Separation is intentionally 150m/side (300m gap), not the earlier
+    # 800m/side -- see scenarios.py's head_on branch for why: the earlier
+    # 1600m gap left every policy (including Rule-Based COLREGs) enough
+    # reaction distance to clear 1000m+ of separation once the IMO
+    # turning-circle fix (see VesselDynamics.N_r's docstring) gave CARGO/USV
+    # a much faster yaw response, saturating compute_safety_score's
+    # 1000m-normalized ceiling for every method.
     agents = ScenarioGenerator.create_scenario("head_on", 2, seed=1)
-    assert (agents[0].current_state.x, agents[0].current_state.y) == (0.0, -800.0)
-    assert (agents[1].current_state.x, agents[1].current_state.y) == (0.0, 800.0)
+    assert (agents[0].current_state.x, agents[0].current_state.y) == (0.0, -150.0)
+    assert (agents[1].current_state.x, agents[1].current_state.y) == (0.0, 150.0)
 
 
 # --- Part 3: real per-VesselType heterogeneity -------------------------------
