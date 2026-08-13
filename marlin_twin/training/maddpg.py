@@ -2,6 +2,7 @@
 CTDE via a replay buffer, target networks, and soft updates."""
 
 import os
+from typing import Callable
 
 import numpy as np
 import torch
@@ -29,7 +30,16 @@ class MADDPGTrainer(BaseTrainer):
         super().__init__(config)
         self.reward_history = []
 
-    def train(self, env: BaseMaritimeEnvironment, n_episodes: int) -> dict[int, Policy]:
+    def train(
+        self,
+        env: BaseMaritimeEnvironment,
+        n_episodes: int,
+        seed_offset: int = 0,
+        on_episode_end: Callable[[int, "MADDPGTrainer"], None] | None = None,
+    ) -> dict[int, Policy]:
+        """`seed_offset`/`on_episode_end` mirror `MAPPOTrainer.train`'s
+        signature (see its docstring) so callers driving multi-stage or
+        milestone-checkpointed training can treat every trainer uniformly."""
         n_vessels = self.config.n_vessels
         if not self.policies:
             self.policies = {i: MADDPGPolicy(n_vessels=n_vessels) for i in range(n_vessels)}
@@ -40,7 +50,7 @@ class MADDPGTrainer(BaseTrainer):
         batch_size = 64
 
         for ep in range(n_episodes):
-            obs, info = env.reset(seed=ep)
+            obs, info = env.reset(seed=seed_offset + ep)
             done = False
             ep_reward = 0.0
 
@@ -97,6 +107,9 @@ class MADDPGTrainer(BaseTrainer):
             self.reward_history.append(ep_reward)
             if ep % max(1, self.config.eval_frequency) == 0 or ep == n_episodes - 1:
                 logger.info(f"Episode {ep}/{n_episodes} - Team Reward: {ep_reward:.2f}")
+
+            if on_episode_end is not None:
+                on_episode_end(ep, self)
 
         return self.policies
 

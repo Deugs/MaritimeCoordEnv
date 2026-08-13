@@ -1,6 +1,7 @@
 """Multi-Agent PPO (MAPPO) trainer with centralized critic, decentralized actors."""
 
 import os
+from typing import Callable
 
 import numpy as np
 import torch
@@ -71,7 +72,15 @@ def _evaluate_policies(
         done = False
         ep_rew = 0.0
         n_steps = 0
-        ep_cpa_list: list[float] = []
+        # True Euclidean minimum pairwise separation, not the per-step
+        # *projected* CPA (`info["min_cpa"]`) -- the latter is a linear
+        # velocity extrapolation that reads near-zero in the instant just
+        # before a rudder command actually changes heading, regardless of
+        # how the real, curving trajectory turns out (see
+        # maritime_coord_env.py's own comments on the two fields). This
+        # matches the canonical per-episode reduction every other evaluator
+        # in this repo uses (scripts/_eval_common.py's run_degradation_sweep).
+        episode_min_distance = 5000.0
         ep_violations = 0
         initial_dist = {
             vid: env.get_scene()
@@ -101,12 +110,12 @@ def _evaluate_policies(
             obs, rewards, team_reward, done, info = env.step(actions)
             ep_rew += team_reward
             n_steps += 1
-            if "min_cpa" in info:
-                cpa_list.append(info["min_cpa"])
-                ep_cpa_list.append(info["min_cpa"])
+            if "true_min_pairwise_distance" in info:
+                episode_min_distance = min(episode_min_distance, info["true_min_pairwise_distance"])
             violation_count += info.get("colregs_violations", 0)
             ep_violations += info.get("colregs_violations", 0)
 
+        cpa_list.append(episode_min_distance)
         total_rewards.append(ep_rew)
         step_vessel_pairs += n_steps * len(fuel_sum)
 
@@ -127,7 +136,7 @@ def _evaluate_policies(
                     transitions=[],
                     total_reward=ep_rew,
                     length=n_steps,
-                    min_cpa=float(min(ep_cpa_list)) if ep_cpa_list else 5000.0,
+                    min_cpa=float(episode_min_distance),
                     colregs_violations=ep_violations,
                     fuel_consumed=float(sum(fuel_sum.values())),
                     time_to_destination=float(n_steps),
@@ -157,7 +166,19 @@ class MAPPOTrainer(BaseTrainer):
         super().__init__(config)
         self.reward_history = []
 
-    def train(self, env: BaseMaritimeEnvironment, n_episodes: int) -> dict[int, Policy]:
+    def train(
+        self,
+        env: BaseMaritimeEnvironment,
+        n_episodes: int,
+        seed_offset: int = 0,
+        on_episode_end: Callable[[int, "MAPPOTrainer"], None] | None = None,
+    ) -> dict[int, Policy]:
+        """`seed_offset` shifts every episode's reset seed
+        (`seed_offset + ep`) so repeated short `train()` calls -- e.g. one
+        per episode, as `TwoStageCurriculumTrainer`'s Stage 2 does -- don't
+        each restart at `ep=0` and silently replay the identical episode.
+        `on_episode_end(ep, self)`, if given, fires after each episode's PPO
+        update (e.g. to save milestone checkpoints during a long run)."""
         n_vessels = self.config.n_vessels
         if not self.policies:
             self.policies = {i: GATPolicy() for i in range(n_vessels)}
@@ -172,7 +193,7 @@ class MAPPOTrainer(BaseTrainer):
         )
 
         for ep in range(n_episodes):
-            obs, info = env.reset(seed=ep)
+            obs, info = env.reset(seed=seed_offset + ep)
             done = False
             ep_reward = 0.0
             buffer.clear()
@@ -277,6 +298,9 @@ class MAPPOTrainer(BaseTrainer):
 
             if ep % max(1, self.config.eval_frequency) == 0 or ep == n_episodes - 1:
                 logger.info(f"Episode {ep}/{n_episodes} - Team Reward: {ep_reward:.2f}")
+
+            if on_episode_end is not None:
+                on_episode_end(ep, self)
 
         return self.policies
 

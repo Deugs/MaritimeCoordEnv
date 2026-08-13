@@ -6,7 +6,21 @@ from marlin_twin.envs.colregs import COLREGsEngine
 
 
 class RuleBasedCOLREGsController:
-    """Deterministic Rule-Based COLREGs Collision Avoidance Controller."""
+    """Deterministic Rule-Based COLREGs Collision Avoidance Controller.
+
+    `act()` returns a `[-1,1]` tanh-space action vector -- the same convention
+    every learned policy emits and the only convention `VesselAgentWrapper
+    .build_action` (`agents/vessel_agent.py`) knows how to interpret. This
+    controller used to return physical values (rpm as a literal fraction,
+    rudder in literal radians) directly; every evaluation path fed those
+    straight into `build_action`, which reinterpreted them as tanh-space and
+    silently reran a different maneuver than the one specified below (rpm=0.8
+    became "always full throttle", the intended 15 deg rudder became ~7.85
+    deg). The mapping below is the exact inverse of `build_action`'s
+    `rpm=clip(a*0.5+0.6, 0.2, 1.0)` / `rudder=clip(a*(pi/6), -pi/6, pi/6)`, so
+    the physical maneuver this class specifies is the one that is actually
+    executed.
+    """
 
     def __init__(self, vessel_id: int):
         self.vessel_id = vessel_id
@@ -14,8 +28,8 @@ class RuleBasedCOLREGsController:
     def act(
         self, observation: VesselObservation, graph=None, node_idx=None, deterministic: bool = True
     ) -> np.ndarray:
-        rudder = 0.0
-        rpm = 0.8
+        rudder_rad = 0.0
+        rpm_frac = 0.8
 
         own_state = observation.own_state
         min_cpa = 5000.0
@@ -32,14 +46,25 @@ class RuleBasedCOLREGsController:
                 own_state, most_dangerous_neighbor, min_cpa
             )
 
-            if enc_type in [EncounterType.HEAD_ON, EncounterType.CROSSING_GIVE_WAY]:
-                rudder = np.pi / 12  # Alter course 15 deg to starboard
+            if enc_type in [
+                EncounterType.HEAD_ON,
+                EncounterType.CROSSING_GIVE_WAY,
+                EncounterType.OVERTAKING,
+            ]:
+                rudder_rad = np.pi / 12  # Alter course 15 deg to starboard (Rule 14/15/13)
             elif enc_type == EncounterType.CROSSING_STAND_ON:
-                rudder = 0.0  # Hold course
+                rudder_rad = 0.0  # Hold course
                 if min_cpa < 300.0:  # Emergency evasion
-                    rudder = np.pi / 6
+                    rudder_rad = np.pi / 6
+            # OVERTAKEN (being overtaken): stand-on duty, hold course.
 
-        return np.array([rpm, rudder], dtype=np.float32)
+        # Invert build_action's rpm=clip(a*0.5+0.6, 0.2, 1.0) and
+        # rudder=clip(a*(pi/6), -pi/6, pi/6) so the physical values above are
+        # what actually reaches the environment.
+        rpm_action = (rpm_frac - 0.6) / 0.5
+        rudder_action = rudder_rad / (np.pi / 6)
+
+        return np.array([rpm_action, rudder_action], dtype=np.float32)
 
     def get_state(self) -> dict:
         return {}

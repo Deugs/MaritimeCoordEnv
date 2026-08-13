@@ -766,14 +766,10 @@ def render_fig9_benchmark_resilience() -> dict:
         return factory
 
     def select_action(env, vid, policy, agent_obs, model, graph, node_idx):
-        if model == "rule_based":
-            act_arr = policy.act(agent_obs, deterministic=True)
-            return VesselAction(
-                vessel_id=vid,
-                propeller_rpm=float(act_arr[0]),
-                rudder_angle=float(act_arr[1]),
-                message_targets=[],
-            )
+        # rule_based's act() emits the same [-1,1] tanh-space convention as
+        # every learned policy (see baselines/rule_based.py's docstring), so
+        # it flows through the generic wrapper like everything else -- no
+        # special-cased bypass needed here anymore.
         wrapper = VesselAgentWrapper(env.get_scene().vessels[vid], policy)
         return wrapper.select_action(agent_obs, graph, node_idx, deterministic=True)
 

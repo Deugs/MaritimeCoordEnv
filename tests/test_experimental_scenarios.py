@@ -109,6 +109,53 @@ def test_crossing_alias_matches_crossing_give_way_exactly():
         assert a1[vid].current_state == a2[vid].current_state
 
 
+def test_overtaking_scenario_has_a_genuine_speed_differential():
+    """Regression guard: both roles used to get the same speed=8.0, which
+    `COLREGsEngine.classify_encounter` can never classify as OVERTAKING
+    (it requires state_i.speed > state_j.speed) -- so this scenario never
+    produced a real overtaking encounter. Role 1 (behind) must be strictly
+    faster than role 0 (ahead) for every pair."""
+    agents = ScenarioGenerator.create_scenario("overtaking", n_vessels=4, seed=7)
+    for pair_idx in range(2):
+        target = agents[pair_idx * 2]  # role 0
+        overtaker = agents[pair_idx * 2 + 1]  # role 1
+        assert overtaker.current_state.speed > target.current_state.speed
+
+
+def test_overtaking_scenario_produces_a_real_overtaking_encounter():
+    """End-to-end guard that the speed differential above actually survives
+    the MMG propulsion dynamics long enough to be classified OVERTAKING at
+    least once (not just at t=0) -- confirms the fix isn't decayed away by
+    the vessels' full-throttle cruise dynamics pulling both back toward a
+    shared speed."""
+    from marlin_twin.envs.colregs import COLREGsEngine
+    from marlin_twin.data_classes import EncounterType
+
+    config = MaritimeExperimentConfig(scenario_type="overtaking", n_vessels=2, episode_length=500)
+    env = MaritimeCoordEnv(config)
+    obs, _ = env.reset(seed=42)
+    controllers = {0: RuleBasedCOLREGsController(0), 1: RuleBasedCOLREGsController(1)}
+
+    seen_types = set()
+    done = False
+    while not done:
+        actions = {}
+        for vid, agent_obs in obs.items():
+            wrapper = env.get_scene().vessels[vid]
+            from marlin_twin.agents.vessel_agent import VesselAgentWrapper
+
+            actions[vid] = VesselAgentWrapper(wrapper, controllers[vid]).select_action(
+                agent_obs, deterministic=True
+            )
+        obs, _, _, done, _ = env.step(actions)
+        v0, v1 = env.get_scene().vessels[0].current_state, env.get_scene().vessels[1].current_state
+        dist = float(np.linalg.norm(v0.position() - v1.position()))
+        enc_type, _ = COLREGsEngine.classify_encounter(v1, v0, dist)  # overtaker's perspective
+        seen_types.add(enc_type)
+
+    assert EncounterType.OVERTAKING in seen_types
+
+
 def test_head_on_two_vessel_geometry_unchanged_from_before_generalization():
     # Separation is intentionally 150m/side (300m gap), not the earlier
     # 800m/side -- see scenarios.py's head_on branch for why: the earlier

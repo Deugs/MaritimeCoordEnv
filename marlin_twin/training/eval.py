@@ -27,6 +27,12 @@ class MultiScenarioEvaluator:
             obs, info = env.reset(scenario_type=scenario_name, seed=5000 + ep)
             done = False
             ep_rew = 0.0
+            # True Euclidean minimum pairwise separation, not the per-step
+            # *projected* CPA (`info["min_cpa"]`) -- see maritime_coord_env.py's
+            # comments on the two fields. Reduced to one per-episode value,
+            # matching the canonical convention every other evaluator in this
+            # repo uses (scripts/_eval_common.py's run_degradation_sweep).
+            episode_min_distance = 5000.0
 
             while not done:
                 actions = {}
@@ -44,9 +50,10 @@ class MultiScenarioEvaluator:
 
                 obs, _, team_reward, done, info = env.step(actions)
                 ep_rew += team_reward
-                if "min_cpa" in info:
-                    cpas.append(info["min_cpa"])
+                if "true_min_pairwise_distance" in info:
+                    episode_min_distance = min(episode_min_distance, info["true_min_pairwise_distance"])
 
+            cpas.append(episode_min_distance)
             rewards.append(ep_rew)
 
         avg_cpa = float(np.mean(cpas)) if cpas else 5000.0

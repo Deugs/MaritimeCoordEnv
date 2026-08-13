@@ -68,7 +68,30 @@ def test_rule_based_controller_alters_course_on_close_head_on_encounter():
     action = controller.act(observation, deterministic=True)
 
     assert action.shape == (2,)
-    assert action[1] == pytest.approx(np.pi / 12)  # 15 deg alteration to starboard
+    # act() emits [-1,1] tanh-space, not physical radians -- 0.5 is the
+    # exact inverse of build_action's rudder=clip(a*(pi/6),...) for a
+    # physical 15 deg (pi/12) alteration to starboard.
+    assert action[1] == pytest.approx(0.5)
+
+
+def test_rule_based_controller_gives_way_when_overtaking():
+    """Regression guard: the controller used to have no branch at all for
+    OVERTAKING/OVERTAKEN, so it took zero avoidance action (rudder=0.0) for
+    an encounter type it now can actually be asked to handle once the
+    `overtaking` scenario produces a real speed differential (see
+    test_experimental_scenarios.py). `classify_encounter`'s Rule 13 check
+    is a bearing-of-the-other-vessel test: own (state_i) classifies as
+    OVERTAKING when the neighbor is >112.5 deg abaft its beam (here, dead
+    astern) and own is faster -- Rule 13 then requires the overtaking
+    vessel to keep clear."""
+    own_state = VesselState(vessel_id=0, x=0.0, y=0.0, heading=0.0, speed=11.0)
+    neighbor_state = VesselState(vessel_id=1, x=0.0, y=-200.0, heading=0.0, speed=4.0)
+    observation = _make_observation(own_state, {1: neighbor_state})
+
+    controller = RuleBasedCOLREGsController(vessel_id=0)
+    action = controller.act(observation, deterministic=True)
+
+    assert action[1] == pytest.approx(0.5)  # 15 deg give-way alteration, tanh-space
 
 
 def test_rule_based_controller_holds_course_with_no_nearby_traffic():
@@ -79,6 +102,35 @@ def test_rule_based_controller_holds_course_with_no_nearby_traffic():
     action = controller.act(observation, deterministic=True)
 
     assert action[1] == pytest.approx(0.0)
+
+
+def test_rule_based_controller_action_round_trips_through_build_action():
+    """The whole point of emitting tanh-space actions: build_action's
+    physical remapping must invert exactly back to the maneuver
+    RuleBasedCOLREGsController actually specifies (0.8 rpm fraction, 15 deg
+    starboard alteration), not a different one. Regression guard for the bug
+    where every evaluation path fed the pre-fix raw radians/rpm-fraction
+    straight into build_action's tanh-space remapping and silently ran a
+    different maneuver (always-full-throttle, ~half rudder angle)."""
+    from types import SimpleNamespace
+    from marlin_twin.agents.vessel_agent import VesselAgentWrapper
+
+    own_state = VesselState(vessel_id=0, x=0.0, y=0.0, heading=0.0, speed=10.0)
+    neighbor_state = VesselState(vessel_id=1, x=0.0, y=1000.0, heading=np.pi, speed=10.0)
+    observation = _make_observation(own_state, {1: neighbor_state})
+
+    controller = RuleBasedCOLREGsController(vessel_id=0)
+    action_vec = controller.act(observation, deterministic=True)
+
+    # build_action only reads `self.agent.vessel_id` -- a bare namespace
+    # avoids constructing an unrelated VesselSpecification/VesselDynamics
+    # this test doesn't otherwise need.
+    agent = SimpleNamespace(vessel_id=0)
+    wrapper = VesselAgentWrapper(agent, controller)
+    vessel_action = wrapper.build_action(observation, action_vec)
+
+    assert vessel_action.propeller_rpm == pytest.approx(0.8)
+    assert vessel_action.rudder_angle == pytest.approx(np.pi / 12)
 
 
 def test_baseline_factory_unknown_algorithm_raises_value_error():

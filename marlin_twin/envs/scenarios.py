@@ -92,6 +92,8 @@ class ScenarioGenerator:
                 yaw_coefficient=profile["yaw_coefficient"],
             )
 
+            speed = 8.0  # overridden per-branch below where a scenario needs a differential
+
             if scenario_type == "head_on" and n_vessels >= 2:
                 # Vessels are grouped into reciprocal-course pairs; each pair
                 # is offset onto its own lane so multiple simultaneous
@@ -144,12 +146,31 @@ class ScenarioGenerator:
                     )  # Heading West (On starboard side)
                     target_x, target_y = center_x - 1500.0, center_y
             elif scenario_type == "overtaking" and n_vessels >= 2:
+                # Both roles used to get the module-wide default speed=8.0,
+                # but `COLREGsEngine.classify_encounter` requires
+                # state_i.speed > state_j.speed to ever classify OVERTAKING
+                # (colregs.py) -- equal speeds always fell through to
+                # OVERTAKEN for both, and since neither vessel actually
+                # closed the gap, this scenario never produced a real
+                # overtaking encounter. A genuine speed differential (target
+                # ahead, slower; overtaker behind, at the same default cruise
+                # speed every other scenario uses) is required for the
+                # geometry to mean what its variable names say. The overtaker
+                # is kept at the shared default (8.0) rather than raised
+                # above it: this fleet cycles CARGO (max_speed=12.0) and USV
+                # (max_speed=7.97) by parity, so pushing role 1's initial
+                # speed materially above 8.0 would be unsustainable whenever
+                # role 1 lands on a USV -- MMG dynamics would decay it back
+                # down and erase the differential this branch exists to
+                # create. Slowing the target instead avoids that regardless
+                # of which type lands on which role.
                 pair_idx, role = i // 2, i % 2
                 lane_x = pair_idx * 800.0
                 if role == 0:  # Slower target ship ahead
+                    speed = 4.0
                     start_x, start_y, heading = lane_x, 500.0, 0.0
                     target_x, target_y = lane_x, 3000.0
-                else:  # Faster overtaking ship behind
+                else:  # Faster overtaking ship behind (shared default cruise speed)
                     start_x, start_y, heading = lane_x, -1000.0, 0.0
                     target_x, target_y = lane_x, 3000.0
             elif scenario_type == "multi_vessel_channel_convergence":
@@ -196,12 +217,12 @@ class ScenarioGenerator:
                 target_y = start_y
 
             state = VesselState(
-                vessel_id=i, x=start_x, y=start_y, heading=heading, speed=8.0, surge_velocity=8.0
+                vessel_id=i, x=start_x, y=start_y, heading=heading, speed=speed, surge_velocity=speed
             )
 
             waypoints = [
-                Waypoint(waypoint_id=0, x=start_x, y=start_y, speed=8.0),
-                Waypoint(waypoint_id=1, x=target_x, y=target_y, speed=8.0),
+                Waypoint(waypoint_id=0, x=start_x, y=start_y, speed=speed),
+                Waypoint(waypoint_id=1, x=target_x, y=target_y, speed=speed),
             ]
             route = Route(vessel_id=i, waypoints=waypoints)
 

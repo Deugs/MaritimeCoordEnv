@@ -13,7 +13,7 @@ from pathlib import Path
 
 import numpy as np
 import matplotlib.pyplot as plt
-from marlin_twin.data_classes import MaritimeExperimentConfig, VesselAction
+from marlin_twin.data_classes import MaritimeExperimentConfig
 from marlin_twin.agents.vessel_agent import VesselAgentWrapper
 from marlin_twin.baselines.factory import BaselineFactory
 from marlin_twin.utils.metrics import compute_resilience_index
@@ -61,14 +61,9 @@ def main():
 
     def make_select_action(alg):
         def select_action(env, vid, policy, agent_obs, graph, node_idx):
-            if alg == "rule_based":
-                act_vec = policy.act(agent_obs, deterministic=True)
-                return VesselAction(
-                    vessel_id=vid,
-                    propeller_rpm=float(act_vec[0]),
-                    rudder_angle=float(act_vec[1]),
-                    message_targets=[],
-                )
+            # rule_based's act() emits the same [-1,1] tanh-space convention
+            # as every learned policy (see baselines/rule_based.py's
+            # docstring), so it flows through the generic wrapper too.
             wrapper = VesselAgentWrapper(env.get_scene().vessels[vid], policy)
             return wrapper.select_action(agent_obs, graph, node_idx, deterministic=True)
 
