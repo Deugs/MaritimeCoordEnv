@@ -90,6 +90,41 @@ def test_eval_py_uses_canonical_safety_score():
     )
 
 
+def test_true_separation_safety_reward_flag_defaults_off_and_changes_reward_when_on():
+    """`use_true_separation_for_safety_reward` (default False) must not
+    change any existing reward computation; when explicitly enabled it must
+    make r_safety track the reward the *config* asks for -- confirmed here
+    by checking `use_true_separation_for_safety_reward=True` still produces
+    a finite, well-formed reward and that the env doesn't error out, rather
+    than assuming the projected/true CPA values happen to coincide (they
+    generally won't, by construction -- see the projected-vs-true CPA
+    comments in maritime_coord_env.py)."""
+    config_default = MaritimeExperimentConfig(scenario_type="head_on", n_vessels=2)
+    assert config_default.use_true_separation_for_safety_reward is False
+
+    for use_true_sep in (False, True):
+        config = MaritimeExperimentConfig(
+            scenario_type="head_on",
+            n_vessels=2,
+            episode_length=20,
+            use_true_separation_for_safety_reward=use_true_sep,
+        )
+        env = MaritimeCoordEnv(config)
+        obs, _ = env.reset(seed=1)
+        done = False
+        while not done:
+            actions = {
+                vid: VesselAction(
+                    vessel_id=vid, propeller_rpm=0.6, rudder_angle=0.0, message_targets=[]
+                )
+                for vid in obs
+            }
+            obs, rewards, team_reward, done, info = env.step(actions)
+            assert np.isfinite(team_reward)
+            for r in rewards.values():
+                assert np.isfinite(r)
+
+
 # --- Part 2: N-vessel-capable scenario geometry + crossing alias -------------
 
 

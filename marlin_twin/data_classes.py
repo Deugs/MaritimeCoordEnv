@@ -872,6 +872,18 @@ class MaritimeExperimentConfig:
     colregs_reward_weight: float = 1.0
     safety_reward_weight: float = 2.0
     efficiency_reward_weight: float = 1.0
+    # When True, `r_safety` is computed from the true per-vessel minimum
+    # pairwise Euclidean separation this step, not the projected/myopic CPA
+    # (`EncounterManager.compute_cpa`'s linear extrapolation, which reads
+    # near-zero in the instant just before a rudder command actually changes
+    # heading -- see maritime_coord_env.py's own comments on the two
+    # quantities). Defaults to False so no existing checkpoint/result is
+    # affected; this is a Phase 2 "fix what the reward measures" arm,
+    # deliberately kept separate from the pure reward-weight sweep since it
+    # changes the objective's definition, not just its weight -- the paper's
+    # own text already flagged this train/eval-metric mismatch as
+    # "deliberately left uncorrected in this study."
+    use_true_separation_for_safety_reward: bool = False
 
     # Logging
     log_dir: str = "./logs"
