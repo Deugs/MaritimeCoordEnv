@@ -11,8 +11,8 @@ every existing checkpoint is stale under the corrected physics and must be retra
 just the sea-trial figure (fig5).
 
 Retrains, unconditionally overwriting existing checkpoints:
-  - 6 baseline/ablation variants x 4 seeds (marlin_twin, ablation_mean_pooling,
-    ablation_flat_mlp, ablation_no_digital_twin, independent_ppo, maddpg) x
+  - 7 baseline/ablation variants x 4 seeds (marlin_twin, ablation_mean_pooling,
+    ablation_flat_mlp, ablation_no_digital_twin, independent_ppo, maddpg, sac) x
     (42, 100, 200, 300) -- backs fig8/fig9 (benchmark/resilience) and fig12
     (ablation study).
   - 3 multi-vessel-generalization variants x 4 seeds (marlin_twin, independent_ppo,
@@ -49,6 +49,7 @@ BASELINE_VARIANTS = [
     "ablation_no_digital_twin",
     "independent_ppo",
     "maddpg",
+    "sac",
 ]
 MV4_VARIANTS = ["marlin_twin", "independent_ppo", "ablation_flat_mlp"]
 N_EPISODES = 150

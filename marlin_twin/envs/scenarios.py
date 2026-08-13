@@ -217,7 +217,12 @@ class ScenarioGenerator:
                 target_y = start_y
 
             state = VesselState(
-                vessel_id=i, x=start_x, y=start_y, heading=heading, speed=speed, surge_velocity=speed
+                vessel_id=i,
+                x=start_x,
+                y=start_y,
+                heading=heading,
+                speed=speed,
+                surge_velocity=speed,
             )
 
             waypoints = [

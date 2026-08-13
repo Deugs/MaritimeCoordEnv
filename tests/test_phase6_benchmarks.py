@@ -11,7 +11,7 @@ def test_baseline_factory_creation():
     config = MaritimeExperimentConfig(n_vessels=3)
     factory = BaselineFactory(config)
 
-    algorithms = ["marlin_twin", "flat_mlp", "rule_based", "independent_ppo", "maddpg"]
+    algorithms = ["marlin_twin", "flat_mlp", "rule_based", "independent_ppo", "maddpg", "sac"]
     for alg in algorithms:
         policies = factory.create(alg)
         assert len(policies) == 3

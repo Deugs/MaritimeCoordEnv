@@ -51,7 +51,9 @@ class MultiScenarioEvaluator:
                 obs, _, team_reward, done, info = env.step(actions)
                 ep_rew += team_reward
                 if "true_min_pairwise_distance" in info:
-                    episode_min_distance = min(episode_min_distance, info["true_min_pairwise_distance"])
+                    episode_min_distance = min(
+                        episode_min_distance, info["true_min_pairwise_distance"]
+                    )
 
             cpas.append(episode_min_distance)
             rewards.append(ep_rew)

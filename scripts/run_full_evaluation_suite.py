@@ -22,6 +22,7 @@ from marlin_twin.envs.maritime_coord_env import MaritimeCoordEnv
 from marlin_twin.agents.policies import GATPolicy
 from marlin_twin.baselines.independent_ppo import IndependentPPOPolicy
 from marlin_twin.baselines.maddpg import MADDPGPolicy
+from marlin_twin.baselines.sac import SACPolicy
 from marlin_twin.baselines.rule_based import RuleBasedCOLREGsController
 from marlin_twin.agents.vessel_agent import VesselAgentWrapper
 from marlin_twin.training.mappo import _build_scene_graph
@@ -39,6 +40,8 @@ def make_policy(model: str, n_vessels: int):
         return IndependentPPOPolicy()
     if model == "maddpg":
         return MADDPGPolicy(n_vessels=n_vessels)
+    if model == "sac":
+        return SACPolicy(n_vessels=n_vessels)
     raise ValueError(f"Unknown model: {model}")
 
 
@@ -64,17 +67,19 @@ def main():
     degradation_levels = np.linspace(0.0, 1.0, 6)
     eval_seeds = [100, 101, 102, 103, 104]
 
-    models = ["marlin_twin", "independent_ppo", "maddpg", "rule_based"]
+    models = ["marlin_twin", "independent_ppo", "maddpg", "sac", "rule_based"]
     model_labels = {
         "marlin_twin": "MARLIN-Twin (MAPPO + GAT + DT EKF)",
         "independent_ppo": "Independent PPO (No Comms)",
         "maddpg": "MADDPG Baseline",
+        "sac": "MASAC (Multi-Agent SAC)",
         "rule_based": "Rule-Based COLREGs",
     }
     colors = {
         "marlin_twin": "#1f77b4",
         "independent_ppo": "#ff7f0e",
         "maddpg": "#2ca02c",
+        "sac": "#9467bd",
         "rule_based": "#d62728",
     }
 

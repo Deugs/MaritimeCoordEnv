@@ -69,11 +69,13 @@ def run_experiment_matrix(
     every combination's per-episode `VoyageEpisode` records (`episode_id`
     prefixed with `run_id` for traceability) across every seed in `seeds`.
 
-    `algorithm == "maddpg"` is skipped for any `n_vessels !=
-    maddpg_fixed_n_vessels` (when the latter is given) — `MADDPGPolicy`'s
-    `CentralizedCritic` has a fixed input width baked in at construction, so
-    it can't be meaningfully evaluated at a fleet size other than the one
-    it would be trained/checkpointed for.
+    Any centralized-critic algorithm (`maddpg`, `sac`/`masac`) is skipped for
+    any `n_vessels != maddpg_fixed_n_vessels` (when the latter is given) —
+    `MADDPGPolicy`/`SACPolicy`'s `CentralizedCritic` has a fixed input width
+    baked in at construction, so it can't be meaningfully evaluated at a
+    fleet size other than the one it would be trained/checkpointed for. The
+    parameter is still named `maddpg_fixed_n_vessels` (not renamed) since
+    it's a public kwarg other scripts/tests already reference by name.
 
     If `checkpoint_dir` is given, each combination best-effort loads
     `{checkpoint_dir}/{algorithm}_seed_{seed}.pt` (the same naming
@@ -99,7 +101,7 @@ def run_experiment_matrix(
                 for schedule in comms_schedules:
                     for algorithm in algorithms:
                         if (
-                            algorithm == "maddpg"
+                            algorithm in ("maddpg", "sac", "masac")
                             and maddpg_fixed_n_vessels is not None
                             and n_vessels != maddpg_fixed_n_vessels
                         ):
@@ -146,8 +148,8 @@ def run_experiment_matrix(
 
     if skipped:
         logger.info(
-            f"Skipped {len(skipped)} maddpg combination(s) with n_vessels "
-            f"!= maddpg_fixed_n_vessels={maddpg_fixed_n_vessels}: {skipped}"
+            f"Skipped {len(skipped)} centralized-critic-algorithm combination(s) with "
+            f"n_vessels != maddpg_fixed_n_vessels={maddpg_fixed_n_vessels}: {skipped}"
         )
 
     return MaritimeExperimentResult(

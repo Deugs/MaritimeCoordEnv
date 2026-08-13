@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
 Phase 6 Validation Script:
-Runs a comparative degradation sweep across MARLIN-Twin, IPPO, MADDPG, and Rule-Based COLREGs,
-computes the formal Resilience Index R_resilience, and generates paper-ready publication figures.
+Runs a comparative degradation sweep across MARLIN-Twin, IPPO, MADDPG, MASAC, and
+Rule-Based COLREGs, computes the formal Resilience Index R_resilience, and generates
+paper-ready publication figures.
 Usage:
     python scripts/phase6_validation.py
 """
@@ -27,17 +28,19 @@ def main():
     print("=== MARLIN-Twin Phase 6 Validation Suite ===")
 
     degradation_levels = [1.0, 0.8, 0.6, 0.4, 0.2, 0.0]
-    algorithms = ["marlin_twin", "independent_ppo", "maddpg", "rule_based"]
+    algorithms = ["marlin_twin", "independent_ppo", "maddpg", "sac", "rule_based"]
     alg_labels = {
         "marlin_twin": "MARLIN-Twin (Proposed GAT)",
         "independent_ppo": "Independent PPO (IPPO)",
         "maddpg": "MADDPG Baseline",
+        "sac": "MASAC (Multi-Agent SAC)",
         "rule_based": "Rule-Based COLREGs",
     }
     alg_colors = {
         "marlin_twin": "#1f77b4",
         "independent_ppo": "#ff7f0e",
         "maddpg": "#2ca02c",
+        "sac": "#9467bd",
         "rule_based": "#d62728",
     }
 

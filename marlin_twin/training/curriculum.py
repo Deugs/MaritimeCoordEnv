@@ -37,7 +37,11 @@ class TwoStageCurriculumTrainer(MAPPOTrainer):
                 1,
                 seed_offset=stage1_episodes + ep,
                 on_episode_end=(
-                    (lambda _ep, trainer, real_ep=ep: on_episode_end(stage1_episodes + real_ep, trainer))
+                    (
+                        lambda _ep, trainer, real_ep=ep: on_episode_end(
+                            stage1_episodes + real_ep, trainer
+                        )
+                    )
                     if on_episode_end is not None
                     else None
                 ),

@@ -46,6 +46,7 @@ from marlin_twin.agents.policies import GATPolicy  # noqa: E402
 from marlin_twin.agents.vessel_agent import VesselAgentWrapper  # noqa: E402
 from marlin_twin.baselines.independent_ppo import IndependentPPOPolicy  # noqa: E402
 from marlin_twin.baselines.maddpg import MADDPGPolicy  # noqa: E402
+from marlin_twin.baselines.sac import SACPolicy  # noqa: E402
 from marlin_twin.baselines.rule_based import RuleBasedCOLREGsController  # noqa: E402
 from marlin_twin.training.mappo import _build_scene_graph  # noqa: E402
 from marlin_twin.training.curriculum import TwoStageCurriculumTrainer  # noqa: E402
@@ -713,6 +714,8 @@ def _make_policy(model: str, n_vessels: int):
         return IndependentPPOPolicy()
     if model == "maddpg":
         return MADDPGPolicy(n_vessels=n_vessels)
+    if model == "sac":
+        return SACPolicy(n_vessels=n_vessels)
     raise ValueError(f"Unknown model: {model}")
 
 
@@ -730,20 +733,28 @@ def render_fig9_benchmark_resilience() -> dict:
     degradation_levels = [1.0, 0.8, 0.6, 0.4, 0.2, 0.0]
     eval_seeds = [100, 101]
     train_seeds = [42, 100, 200, 300]
-    models = ["marlin_twin", "independent_ppo", "maddpg", "rule_based"]
+    models = ["marlin_twin", "independent_ppo", "maddpg", "sac", "rule_based"]
     model_labels = {
         "marlin_twin": "MARLIN-Twin (GAT)",
         "independent_ppo": "Independent PPO",
         "maddpg": "MADDPG Baseline",
+        "sac": "MASAC (Multi-Agent SAC)",
         "rule_based": "Rule-Based COLREGs",
     }
     colors = {
         "marlin_twin": "#1f77b4",
         "independent_ppo": "#ff7f0e",
         "maddpg": "#2ca02c",
+        "sac": "#9467bd",
         "rule_based": "#d62728",
     }
-    styles = {"marlin_twin": "o-", "independent_ppo": "s--", "maddpg": "^-.", "rule_based": "d:"}
+    styles = {
+        "marlin_twin": "o-",
+        "independent_ppo": "s--",
+        "maddpg": "^-.",
+        "sac": "v--",
+        "rule_based": "d:",
+    }
 
     config = MaritimeExperimentConfig(scenario_type="head_on", n_vessels=2, episode_length=500)
 

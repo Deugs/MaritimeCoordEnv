@@ -59,6 +59,19 @@ def test_independent_ppo_and_maddpg_act_like_gat_policy():
     assert np.all(np.isfinite(maddpg_action))
 
 
+def test_sac_policy_acts_like_gat_policy():
+    from marlin_twin.baselines.sac import SACPolicy
+
+    config = MaritimeExperimentConfig(scenario_type="head_on", n_vessels=2)
+    env = MaritimeCoordEnv(config)
+    obs, _ = env.reset(seed=1)
+    graph, node_idx_map = _build_scene_graph(env, obs.keys(), float(env.time_step))
+
+    sac_action = SACPolicy(n_vessels=2).act(obs[0], graph, node_idx_map[0], deterministic=True)
+    assert sac_action.shape == (2,)
+    assert np.all(np.isfinite(sac_action))
+
+
 def test_rule_based_controller_alters_course_on_close_head_on_encounter():
     own_state = VesselState(vessel_id=0, x=0.0, y=0.0, heading=0.0, speed=10.0)
     neighbor_state = VesselState(vessel_id=1, x=0.0, y=1000.0, heading=np.pi, speed=10.0)
