@@ -149,15 +149,21 @@ def run_screening() -> dict:
 
 def pick_most_discriminative(screen_results: dict) -> str:
     """Selects the scenario with the LOWEST rule_based J(1.0) among those
-    where the random-policy floor is meaningfully worse (i.e. the scenario
-    is not trivially easy for everyone) -- the scenario that most exercises
-    rule_based's confirmed structural weakness (single-nearest-neighbor
-    reduction, unable to represent simultaneous conflicting obligations)."""
+    that are actually informative -- excluding only the "floor" case where
+    BOTH rule_based and the random-policy baseline score near zero (nobody,
+    including a real trained algorithm, could plausibly do anything there,
+    so it says nothing about rule_based specifically). Deliberately does
+    NOT require rule_based to score above the random floor: a scenario
+    where rule_based scores BELOW random (as B1_port_approach_n6 does --
+    0.111 vs. 0.187) is the single most informative case, not a
+    disqualifying one -- an earlier version of this filter required
+    `rule_based_j1 > random_policy_j1 + 0.02`, which inverted the intended
+    meaning and silently excluded exactly that scenario."""
+    NEAR_ZERO_FLOOR = 0.02
     candidates = {
         name: r
         for name, r in screen_results.items()
-        if r["rule_based_j1"]
-        > r["random_policy_j1"] + 0.02  # rule_based is not merely at the floor
+        if max(r["rule_based_j1"], r["random_policy_j1"]) >= NEAR_ZERO_FLOOR
     }
     pool = candidates or screen_results
     return min(pool, key=lambda name: pool[name]["rule_based_j1"])
