@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
 Phase 6 Validation Script:
-Runs a comparative degradation sweep across MARLIN-Twin, IPPO, MADDPG, and Rule-Based COLREGs,
-computes the formal Resilience Index R_resilience, and generates paper-ready publication figures.
+Runs a comparative degradation sweep across MARLIN-Twin, IPPO, MADDPG, MASAC, and
+Rule-Based COLREGs, computes the formal Resilience Index R_resilience, and generates
+paper-ready publication figures.
 Usage:
     python scripts/phase6_validation.py
 """
@@ -13,7 +14,7 @@ from pathlib import Path
 
 import numpy as np
 import matplotlib.pyplot as plt
-from marlin_twin.data_classes import MaritimeExperimentConfig, VesselAction
+from marlin_twin.data_classes import MaritimeExperimentConfig
 from marlin_twin.agents.vessel_agent import VesselAgentWrapper
 from marlin_twin.baselines.factory import BaselineFactory
 from marlin_twin.utils.metrics import compute_resilience_index
@@ -27,17 +28,19 @@ def main():
     print("=== MARLIN-Twin Phase 6 Validation Suite ===")
 
     degradation_levels = [1.0, 0.8, 0.6, 0.4, 0.2, 0.0]
-    algorithms = ["marlin_twin", "independent_ppo", "maddpg", "rule_based"]
+    algorithms = ["marlin_twin", "independent_ppo", "maddpg", "sac", "rule_based"]
     alg_labels = {
         "marlin_twin": "MARLIN-Twin (Proposed GAT)",
         "independent_ppo": "Independent PPO (IPPO)",
         "maddpg": "MADDPG Baseline",
+        "sac": "MASAC (Multi-Agent SAC)",
         "rule_based": "Rule-Based COLREGs",
     }
     alg_colors = {
         "marlin_twin": "#1f77b4",
         "independent_ppo": "#ff7f0e",
         "maddpg": "#2ca02c",
+        "sac": "#9467bd",
         "rule_based": "#d62728",
     }
 
@@ -61,14 +64,9 @@ def main():
 
     def make_select_action(alg):
         def select_action(env, vid, policy, agent_obs, graph, node_idx):
-            if alg == "rule_based":
-                act_vec = policy.act(agent_obs, deterministic=True)
-                return VesselAction(
-                    vessel_id=vid,
-                    propeller_rpm=float(act_vec[0]),
-                    rudder_angle=float(act_vec[1]),
-                    message_targets=[],
-                )
+            # rule_based's act() emits the same [-1,1] tanh-space convention
+            # as every learned policy (see baselines/rule_based.py's
+            # docstring), so it flows through the generic wrapper too.
             wrapper = VesselAgentWrapper(env.get_scene().vessels[vid], policy)
             return wrapper.select_action(agent_obs, graph, node_idx, deterministic=True)
 

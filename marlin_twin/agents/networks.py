@@ -161,6 +161,41 @@ class DeterministicActor(nn.Module):
         return torch.tanh(self.net(obs))
 
 
+class SquashedGaussianActor(nn.Module):
+    """SAC decentralized stochastic actor: `own_feats ++ encoder embedding`
+    -> (mean, log_std) of a Gaussian over pre-tanh actions. Deliberately
+    returns distribution parameters rather than a sampled action -- the
+    reparameterized draw and the tanh change-of-variables log-prob
+    correction are applied by `SACPolicy.sample_action`
+    (`baselines/sac.py`), which can import `tanh_corrected_log_prob` from
+    `agents/policies.py` without the circular import that would result
+    from importing it here (`policies.py` imports from this module).
+
+    Unlike `ActorCriticNet`, this clamps `log_std` to SAC's usual
+    [-20, 2] rather than [-2.0, 0.5] -- SAC's auto-tuned entropy needs the
+    policy to be able to become genuinely near-deterministic -- and it
+    carries no value head, since SAC uses centralized Q critics instead.
+    """
+
+    LOG_STD_MIN = -20.0
+    LOG_STD_MAX = 2.0
+
+    def __init__(self, obs_dim: int = 70, action_dim: int = 2, hidden_dim: int = 64):
+        super().__init__()
+        self.action_dim = action_dim
+        self.net = nn.Sequential(
+            nn.Linear(obs_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, action_dim * 2),  # mean + log_std
+        )
+
+    def forward(self, obs: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        mean, log_std = self.net(obs).chunk(2, dim=-1)
+        return mean, torch.clamp(log_std, self.LOG_STD_MIN, self.LOG_STD_MAX)
+
+
 class CentralizedCritic(nn.Module):
     """MADDPG centralized critic: a joint Q-value over every vessel's
     `own_feats ++ embedding` and every vessel's action, concatenated —

@@ -63,8 +63,9 @@ def main():
         "--maddpg-n-vessels",
         type=int,
         default=None,
-        help="Only evaluate 'maddpg' at this exact n_vessels (skipped entirely if omitted "
-        "while 'maddpg' is in --algorithms and --n-vessels has more than one value).",
+        help="Only evaluate 'maddpg'/'sac' at this exact n_vessels (skipped entirely if "
+        "omitted while either is in --algorithms and --n-vessels has more than one value) -- "
+        "both have a centralized critic whose input width is fixed at construction.",
     )
     parser.add_argument(
         "--with-comms-schedule-demo",

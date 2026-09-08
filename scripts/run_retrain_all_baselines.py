@@ -14,9 +14,11 @@ from marlin_twin.data_classes import MaritimeExperimentConfig
 from marlin_twin.envs.maritime_coord_env import MaritimeCoordEnv
 from marlin_twin.training.curriculum import TwoStageCurriculumTrainer
 from marlin_twin.training.maddpg import MADDPGTrainer
+from marlin_twin.training.sac import MASACTrainer
 from marlin_twin.agents.policies import GATPolicy, MeanPoolingPolicy, MLPPolicy
 from marlin_twin.baselines.independent_ppo import IndependentPPOPolicy
 from marlin_twin.baselines.maddpg import MADDPGPolicy
+from marlin_twin.baselines.sac import SACPolicy
 from marlin_twin.utils.seeding import seed_everything
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -59,6 +61,15 @@ def retrain_variant(variant_name: str, seeds: list[int], n_episodes: int = 250):
                 i: MADDPGPolicy(n_vessels=config.n_vessels) for i in range(config.n_vessels)
             }
             trainer.train(env, n_episodes=n_episodes)
+        elif variant_name == "sac":
+            # Off-policy CTDE, same as maddpg above but via MASACTrainer --
+            # a genuinely different algorithm class (max-entropy stochastic
+            # actor, twin critics) rather than another PPO/MAPPO variant.
+            trainer = MASACTrainer(config)
+            trainer.policies = {
+                i: SACPolicy(n_vessels=config.n_vessels) for i in range(config.n_vessels)
+            }
+            trainer.train(env, n_episodes=n_episodes)
         else:
             trainer = TwoStageCurriculumTrainer(config)
 
@@ -95,6 +106,7 @@ def main():
         "ablation_no_digital_twin",
         "independent_ppo",
         "maddpg",
+        "sac",
     ]
 
     for var in variants:

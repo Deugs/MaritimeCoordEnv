@@ -222,15 +222,47 @@ class MaritimeCoordEnv(BaseMaritimeEnvironment):
             new_states, max_range=5556.0 * visibility_factor, max_cpa=1852.0 * visibility_factor
         )
 
+        # Step 4.5: per-vessel TRUE minimum pairwise separation -- only
+        # computed when opted into (config.use_true_separation_for_safety_reward),
+        # since it changes what r_safety below actually measures. This is the
+        # real Euclidean distance to the nearest other vessel this step, not
+        # the projected/myopic CPA `encounters` carries (see the comment on
+        # `r_safety` below and on `true_min_pairwise_distance` in the `info`
+        # dict further down, which computes the same quantity but reduced
+        # across all pairs rather than per-vessel).
+        true_min_pairwise_per_vessel = {}
+        if self.config.use_true_separation_for_safety_reward:
+            vessel_id_list = list(new_states.keys())
+            for vid_i in vessel_id_list:
+                min_d = 5000.0
+                for vid_j in vessel_id_list:
+                    if vid_i == vid_j:
+                        continue
+                    d = float(
+                        np.linalg.norm(new_states[vid_i].position() - new_states[vid_j].position())
+                    )
+                    min_d = min(min_d, d)
+                true_min_pairwise_per_vessel[vid_i] = min_d
+
         # Step 5: Compute Rewards
         rewards = {}
         colregs_violations = 0
         for vid, ag in self.scene.vessels.items():
-            # Safety reward (CPA penalty)
-            min_cpa = min(
-                [e.cpa_distance for e in encounters if e.vessel_i == vid or e.vessel_j == vid],
-                default=5000.0,
-            )
+            # Safety reward (CPA penalty). `use_true_separation_for_safety_reward`
+            # (default False, unchanged behavior) swaps the projected/myopic
+            # CPA for the true separation computed above -- the quantity
+            # J(lambda) actually evaluates. Left as the projected CPA by
+            # default because that mismatch is a known, deliberately
+            # unaddressed limitation of the published reward (see this
+            # env's `info["min_cpa"]`/`info["true_min_pairwise_distance"]`
+            # comments below), not a bug to silently fix under everyone.
+            if self.config.use_true_separation_for_safety_reward:
+                min_cpa = true_min_pairwise_per_vessel.get(vid, 5000.0)
+            else:
+                min_cpa = min(
+                    [e.cpa_distance for e in encounters if e.vessel_i == vid or e.vessel_j == vid],
+                    default=5000.0,
+                )
             r_safety = -np.exp(-min_cpa / 200.0)
 
             # COLREGs compliance reward

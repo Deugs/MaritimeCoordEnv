@@ -5,6 +5,7 @@ from marlin_twin.api import Policy
 from marlin_twin.baselines.rule_based import RuleBasedCOLREGsController
 from marlin_twin.baselines.independent_ppo import IndependentPPOPolicy
 from marlin_twin.baselines.maddpg import MADDPGPolicy
+from marlin_twin.baselines.sac import SACPolicy
 
 
 class BaselineFactory:
@@ -29,5 +30,7 @@ class BaselineFactory:
             return {i: IndependentPPOPolicy() for i in range(n_vessels)}
         elif algorithm == "maddpg":
             return {i: MADDPGPolicy(n_vessels=n_vessels) for i in range(n_vessels)}
+        elif algorithm in ["sac", "masac"]:
+            return {i: SACPolicy(n_vessels=n_vessels) for i in range(n_vessels)}
         else:
             raise ValueError(f"Unknown baseline algorithm: {algorithm}")

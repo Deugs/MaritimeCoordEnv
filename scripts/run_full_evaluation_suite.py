@@ -17,15 +17,17 @@ import numpy as np
 import matplotlib.pyplot as plt
 from loguru import logger
 
-from marlin_twin.data_classes import MaritimeExperimentConfig, VesselAction
+from marlin_twin.data_classes import MaritimeExperimentConfig
 from marlin_twin.envs.maritime_coord_env import MaritimeCoordEnv
 from marlin_twin.agents.policies import GATPolicy
 from marlin_twin.baselines.independent_ppo import IndependentPPOPolicy
 from marlin_twin.baselines.maddpg import MADDPGPolicy
+from marlin_twin.baselines.sac import SACPolicy
 from marlin_twin.baselines.rule_based import RuleBasedCOLREGsController
 from marlin_twin.agents.vessel_agent import VesselAgentWrapper
 from marlin_twin.training.mappo import _build_scene_graph
 from marlin_twin.utils.metrics import compute_resilience_index
+from marlin_twin.utils.scoring import compute_safety_score
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _eval_common import REPO_ROOT, run_degradation_sweep  # noqa: E402
@@ -38,6 +40,8 @@ def make_policy(model: str, n_vessels: int):
         return IndependentPPOPolicy()
     if model == "maddpg":
         return MADDPGPolicy(n_vessels=n_vessels)
+    if model == "sac":
+        return SACPolicy(n_vessels=n_vessels)
     raise ValueError(f"Unknown model: {model}")
 
 
@@ -63,17 +67,19 @@ def main():
     degradation_levels = np.linspace(0.0, 1.0, 6)
     eval_seeds = [100, 101, 102, 103, 104]
 
-    models = ["marlin_twin", "independent_ppo", "maddpg", "rule_based"]
+    models = ["marlin_twin", "independent_ppo", "maddpg", "sac", "rule_based"]
     model_labels = {
         "marlin_twin": "MARLIN-Twin (MAPPO + GAT + DT EKF)",
         "independent_ppo": "Independent PPO (No Comms)",
         "maddpg": "MADDPG Baseline",
+        "sac": "MASAC (Multi-Agent SAC)",
         "rule_based": "Rule-Based COLREGs",
     }
     colors = {
         "marlin_twin": "#1f77b4",
         "independent_ppo": "#ff7f0e",
         "maddpg": "#2ca02c",
+        "sac": "#9467bd",
         "rule_based": "#d62728",
     }
 
@@ -105,14 +111,9 @@ def main():
         return factory
 
     def select_action(env, vid, policy, agent_obs, model, graph, node_idx):
-        if model == "rule_based":
-            act_arr = policy.act(agent_obs, deterministic=True)
-            return VesselAction(
-                vessel_id=vid,
-                propeller_rpm=float(act_arr[0]),
-                rudder_angle=float(act_arr[1]),
-                message_targets=[],
-            )
+        # rule_based's act() emits the same [-1,1] tanh-space convention as
+        # every learned policy (see baselines/rule_based.py's docstring), so
+        # it flows through the generic wrapper like everything else.
         wrapper = VesselAgentWrapper(env.get_scene().vessels[vid], policy)
         return wrapper.select_action(agent_obs, graph, node_idx, deterministic=True)
 
@@ -188,7 +189,12 @@ def main():
                 uses_graph = any(getattr(p, "USES_GRAPH", False) for p in pols.values())
                 obs, _ = env.reset(seed=seed)
                 done = False
-                min_dist = 5000.0
+                # True Euclidean minimum pairwise separation, not the
+                # myopic projected CPA -- and reduced to one per-episode
+                # value fed through the canonical `compute_safety_score`,
+                # the same formula every other evaluator in this repo uses
+                # (see scripts/_eval_common.py's run_degradation_sweep).
+                episode_min_distance = 5000.0
 
                 while not done:
                     if uses_graph:
@@ -200,30 +206,20 @@ def main():
 
                     actions = {}
                     for vid, agent_obs in obs.items():
-                        if model == "rule_based":
-                            act_arr = pols[vid].act(agent_obs, deterministic=True)
-                            actions[vid] = VesselAction(
-                                vessel_id=vid,
-                                propeller_rpm=float(act_arr[0]),
-                                rudder_angle=float(act_arr[1]),
-                                message_targets=[],
-                            )
-                        else:
-                            wrapper = VesselAgentWrapper(env.get_scene().vessels[vid], pols[vid])
-                            actions[vid] = wrapper.select_action(
-                                agent_obs, graph, node_idx_map.get(vid), deterministic=True
-                            )
+                        # rule_based flows through the generic wrapper like
+                        # every other policy -- see baselines/rule_based.py.
+                        wrapper = VesselAgentWrapper(env.get_scene().vessels[vid], pols[vid])
+                        actions[vid] = wrapper.select_action(
+                            agent_obs, graph, node_idx_map.get(vid), deterministic=True
+                        )
 
                     obs, _, team_reward, done, info = env.step(actions)
-                    v_ids = list(env.get_scene().vessels.keys())
-                    if len(v_ids) >= 2:
-                        p1 = env.get_scene().vessels[v_ids[0]].current_state.position()
-                        p2 = env.get_scene().vessels[v_ids[1]].current_state.position()
-                        d = float(np.linalg.norm(p1 - p2))
-                        if d < min_dist:
-                            min_dist = d
+                    if "true_min_pairwise_distance" in info:
+                        episode_min_distance = min(
+                            episode_min_distance, info["true_min_pairwise_distance"]
+                        )
 
-                safety_score = float(np.clip(min_dist / 500.0, 0.05, 1.0))
+                safety_score = compute_safety_score([episode_min_distance])
                 scores.append(safety_score)
 
             results_scen[model].append(float(np.mean(scores)))

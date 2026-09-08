@@ -1,0 +1,205 @@
+{
+  "git_sha": "daaf54fc5d4817e44ee5856f455edfec0eb0f242",
+  "seeds": [
+    42,
+    100,
+    200
+  ],
+  "n_episodes": 500,
+  "eval_seeds": [
+    100,
+    101,
+    102,
+    103,
+    104,
+    105,
+    106,
+    107,
+    108,
+    109
+  ],
+  "arms": {
+    "A0": {
+      "weights": [
+        2.0,
+        1.0,
+        1.0,
+        false
+      ],
+      "j1_per_seed": [
+        0.09881606826151139,
+        0.09915430726783345,
+        0.09520190436436272
+      ],
+      "j1_mean": 0.0977240932979025,
+      "j1_std": 0.0017887945976182568,
+      "resilience_mean": 1.0,
+      "resilience_std": 0.0,
+      "route_completed_fraction_mean": 0.0,
+      "mean_final_distance_mean": 259.14233008910367,
+      "mean_speed_mean": 6.937402356752721,
+      "sub_100m_rate": 1.0
+    },
+    "A1": {
+      "weights": [
+        2.0,
+        1.0,
+        0.0,
+        false
+      ],
+      "j1_per_seed": [
+        0.09946872116118623,
+        0.09944399419077296,
+        0.09629347245571294
+      ],
+      "j1_mean": 0.09840206260255739,
+      "j1_std": 0.0014910325642081116,
+      "resilience_mean": 1.0,
+      "resilience_std": 0.0,
+      "route_completed_fraction_mean": 0.0,
+      "mean_final_distance_mean": 263.48395547535637,
+      "mean_speed_mean": 6.477635757315551,
+      "sub_100m_rate": 1.0
+    },
+    "A2": {
+      "weights": [
+        2.0,
+        1.0,
+        0.1,
+        false
+      ],
+      "j1_per_seed": [
+        0.0993078333370255,
+        0.09909002904063889,
+        0.09527030543453116
+      ],
+      "j1_mean": 0.09788938927073183,
+      "j1_std": 0.0018541053158989131,
+      "resilience_mean": 1.0,
+      "resilience_std": 0.0,
+      "route_completed_fraction_mean": 0.0,
+      "mean_final_distance_mean": 233.2951869325274,
+      "mean_speed_mean": 7.103552181216941,
+      "sub_100m_rate": 1.0
+    },
+    "A3": {
+      "weights": [
+        8.0,
+        1.0,
+        1.0,
+        false
+      ],
+      "j1_per_seed": [
+        0.0665776322106707,
+        0.06544702577829706,
+        0.09642709412720664
+      ],
+      "j1_mean": 0.07615058403872481,
+      "j1_std": 0.014345085424457175,
+      "resilience_mean": 1.0,
+      "resilience_std": 0.0,
+      "route_completed_fraction_mean": 0.0,
+      "mean_final_distance_mean": 256.96609822745455,
+      "mean_speed_mean": 6.873619969066887,
+      "sub_100m_rate": 1.0
+    },
+    "A4": {
+      "weights": [
+        2.0,
+        4.0,
+        1.0,
+        false
+      ],
+      "j1_per_seed": [
+        0.09929673858683305,
+        0.0993225059942758,
+        0.09931373196016288
+      ],
+      "j1_mean": 0.0993109921804239,
+      "j1_std": 1.069640488961286e-05,
+      "resilience_mean": 1.0,
+      "resilience_std": 0.0,
+      "route_completed_fraction_mean": 0.0,
+      "mean_final_distance_mean": 273.2372361826388,
+      "mean_speed_mean": 6.627078575400392,
+      "sub_100m_rate": 1.0
+    },
+    "A5": {
+      "weights": [
+        8.0,
+        1.0,
+        0.1,
+        false
+      ],
+      "j1_per_seed": [
+        0.01607795950693352,
+        0.09886982775120452,
+        0.03865381342586881
+      ],
+      "j1_mean": 0.051200533561335616,
+      "j1_std": 0.03494460856329131,
+      "resilience_mean": 1.0,
+      "resilience_std": 0.0,
+      "route_completed_fraction_mean": 0.3333333333333333,
+      "mean_final_distance_mean": 180.70178168054008,
+      "mean_speed_mean": 7.37233262091538,
+      "sub_100m_rate": 1.0
+    },
+    "A6": {
+      "weights": [
+        2.0,
+        1.0,
+        0.1,
+        true
+      ],
+      "j1_per_seed": [
+        0.09693351018099734,
+        0.09882544355651456,
+        0.09915997618107032
+      ],
+      "j1_mean": 0.09830630997286073,
+      "j1_std": 0.0009802763116006912,
+      "resilience_mean": 1.0,
+      "resilience_std": 0.0,
+      "route_completed_fraction_mean": 0.0,
+      "mean_final_distance_mean": 269.3214400718791,
+      "mean_speed_mean": 6.460451169875579,
+      "sub_100m_rate": 1.0
+    },
+    "A7": {
+      "weights": [
+        2.0,
+        1.0,
+        1.0,
+        true
+      ],
+      "j1_per_seed": [
+        0.09916458853539782,
+        0.09927664992330952,
+        0.0973695102062171
+      ],
+      "j1_mean": 0.09860358288830816,
+      "j1_std": 0.0008738195760291751,
+      "resilience_mean": 1.0,
+      "resilience_std": 0.0,
+      "route_completed_fraction_mean": 0.0,
+      "mean_final_distance_mean": 254.0518346648248,
+      "mean_speed_mean": 6.695275079037472,
+      "sub_100m_rate": 1.0
+    },
+    "rule_based": {
+      "weights": null,
+      "j1_per_seed": [
+        0.08507385279893484
+      ],
+      "j1_mean": 0.08507385279893484,
+      "j1_std": 0.0,
+      "resilience_mean": 0.9700686800967541,
+      "resilience_std": 0.0,
+      "route_completed_fraction_mean": 0.0,
+      "mean_final_distance_mean": 887.5282899908912,
+      "mean_speed_mean": 8.887331769696205,
+      "sub_100m_rate": 1.0
+    }
+  }
+}

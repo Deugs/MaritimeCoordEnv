@@ -74,12 +74,15 @@ def main():
     }
 
     degradation_levels = np.linspace(0.0, 1.0, 6)  # 0.0 (total loss) to 1.0 (full comms)
-    eval_seeds = [100, 101, 102, 103, 104]
-    # Each variant is retrained independently under 4 seeds (42/100/200/300); the
-    # reported mean/std below is the across-training-seed variance (does the ablation
-    # finding replicate across independently trained models), not merely the
+    eval_seeds = list(range(100, 110))
+    # Each variant is retrained independently under 5 seeds (42/100/200/300/400) at
+    # the "e500" budget (Phase 1's run_training_budget_study.py -- 500 episodes with
+    # the curriculum Stage-2 seed-collapse bug fixed, not the original 150-episode/
+    # pre-fix checkpoints still present for the historical comparison); the reported
+    # mean/std below is the across-training-seed variance (does the ablation finding
+    # replicate across independently trained models), not merely the
     # within-checkpoint episode-to-episode variance eval_seeds captures.
-    train_seeds = [42, 100, 200, 300]
+    train_seeds = [42, 100, 200, 300, 400]
 
     ablation_results = {v: [] for v in variants}
     ablation_stds = {v: [] for v in variants}
@@ -101,7 +104,9 @@ def main():
                 elif var == "ablation_flat_mlp":
                     pols = {i: MLPPolicy() for i in range(2)}
 
-                ckpt_path = os.path.join(REPO_ROOT, "checkpoints", f"{var}_seed_{train_seed}.pt")
+                ckpt_path = os.path.join(
+                    REPO_ROOT, "checkpoints", f"e500_{var}_seed_{train_seed}.pt"
+                )
                 if os.path.exists(ckpt_path):
                     ckpt_data = torch.load(ckpt_path, weights_only=True)
                     for i in range(2):
