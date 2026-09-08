@@ -6,7 +6,7 @@
   <rdf:RDF xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:cc="http://creativecommons.org/ns#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
    <cc:Work>
     <dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/>
-    <dc:date>2026-08-07T08:06:26.185880</dc:date>
+    <dc:date>2026-09-08T07:54:51.828064</dc:date>
     <dc:format>image/svg+xml</dc:format>
     <dc:creator>
      <cc:Agent>
@@ -40,7 +40,7 @@ Q 10.8 42.512 10.8 47.4528
 L 10.8 141.328 
 Q 10.8 146.2688 20.6784 146.2688 
 z
-" clip-path="url(#pd6d76cc55d)" style="fill: #e6f0fa; stroke: #1f77b4; stroke-width: 2; stroke-linejoin: miter"/>
+" clip-path="url(#pe8a5562a63)" style="fill: #e6f0fa; stroke: #1f77b4; stroke-width: 2; stroke-linejoin: miter"/>
    </g>
    <g id="patch_3">
     <path d="M 188.6112 146.2688 
@@ -53,7 +53,7 @@ Q 178.7328 42.512 178.7328 47.4528
 L 178.7328 141.328 
 Q 178.7328 146.2688 188.6112 146.2688 
 z
-" clip-path="url(#pd6d76cc55d)" style="fill: #e6f5e6; stroke: #2ca02c; stroke-width: 2; stroke-linejoin: miter"/>
+" clip-path="url(#pe8a5562a63)" style="fill: #e6f5e6; stroke: #2ca02c; stroke-width: 2; stroke-linejoin: miter"/>
    </g>
    <g id="patch_4">
     <path d="M 356.544 146.2688 
@@ -66,7 +66,7 @@ Q 346.6656 42.512 346.6656 47.4528
 L 346.6656 141.328 
 Q 346.6656 146.2688 356.544 146.2688 
 z
-" clip-path="url(#pd6d76cc55d)" style="fill: #fff0e6; stroke: #ff7f0e; stroke-width: 2; stroke-linejoin: miter"/>
+" clip-path="url(#pe8a5562a63)" style="fill: #fff0e6; stroke: #ff7f0e; stroke-width: 2; stroke-linejoin: miter"/>
    </g>
    <g id="patch_5">
     <path d="M 109.584 269.7888 
@@ -79,7 +79,7 @@ Q 99.7056 166.032 99.7056 170.9728
 L 99.7056 264.848 
 Q 99.7056 269.7888 109.584 269.7888 
 z
-" clip-path="url(#pd6d76cc55d)" style="fill: #f0e6f5; stroke: #9467bd; stroke-width: 2; stroke-linejoin: miter"/>
+" clip-path="url(#pe8a5562a63)" style="fill: #f0e6f5; stroke: #9467bd; stroke-width: 2; stroke-linejoin: miter"/>
    </g>
    <g id="text_1">
     <!-- Physical Environment -->
@@ -3680,7 +3680,7 @@ z
   </g>
  </g>
  <defs>
-  <clipPath id="pd6d76cc55d">
+  <clipPath id="pe8a5562a63">
    <rect x="10.8" y="30.16" width="493.92" height="247.04"/>
   </clipPath>
  </defs>

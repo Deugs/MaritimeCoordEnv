@@ -374,7 +374,14 @@ def _run_blackout_digital_twin(seed: int, n_steps: int = 120, dt: float = 10.0) 
     """Drives a real vessel through the MMG solver, feeds its true trajectory through
     DigitalTwinEstimator's real EKF/JPDA update with a 300s AIS blackout window, and
     computes real position RMSE. Used by both fig6 and fig11 -- there is no dataset
-    behind either one, only this simulated-but-mechanically-real trajectory."""
+    behind either one, only this simulated-but-mechanically-real trajectory.
+
+    DigitalTwinEstimator.update() itself draws its own measurement and dead-reckoning
+    noise from the global numpy RNG (not from any generator passed into it), so this
+    function's own reproducibility requires seeding that global state too -- the local
+    `rng` below only covers the extra measurement noise added on top before handing a
+    reading to the estimator, not the estimator's internal draws."""
+    np.random.seed(seed)
     rng = np.random.default_rng(seed)
     dynamics = VesselDynamics(
         vessel_id=1,
@@ -464,6 +471,12 @@ def _run_real_ais_digital_twin(outage_duration_s: float = 300.0) -> dict:
     validating against AIS data, since consumer-grade GPS position accuracy is well
     within the meters-scale noise already added on top here), and reporting intervals
     are real and irregular (~61-71s apart), not a fixed simulation dt.
+
+    Like `_run_blackout_digital_twin`, this seeds the global numpy RNG (not just the
+    local `rng` below) because DigitalTwinEstimator.update() draws its own measurement
+    and dead-reckoning noise from the global state -- without this, the resulting RMSE
+    silently depends on whatever ran before this function in the same process, rather
+    than being a reproducible property of this trajectory and this seed.
     """
     from marlin_twin.data.ais_loader import AISDataLoader
 
@@ -477,6 +490,7 @@ def _run_real_ais_digital_twin(outage_duration_s: float = 300.0) -> dict:
     outage_end_s = outage_start_s + outage_duration_s
 
     estimator = DigitalTwinEstimator()
+    np.random.seed(11)
     rng = np.random.default_rng(11)
     true_xs, true_ys, est_xs, est_ys, outage_mask = [], [], [], [], []
 
