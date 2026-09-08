@@ -648,7 +648,7 @@ def render_fig8_degradation_heatmap() -> dict:
             env = MaritimeCoordEnv(config)
             env.set_communication_degradation(lam)
             pols = {i: GATPolicy() for i in range(2)}
-            ckpt_path = os.path.join(REPO_ROOT, "checkpoints", "marlin_twin_seed_42.pt")
+            ckpt_path = os.path.join(REPO_ROOT, "checkpoints", "e500_marlin_twin_seed_42.pt")
             if os.path.exists(ckpt_path):
                 ckpt = torch.load(ckpt_path, weights_only=True)
                 for i in range(2):
@@ -724,15 +724,21 @@ def render_fig9_benchmark_resilience() -> dict:
     same real degradation sweep + compute_resilience_index used by run_ablation_study.py
     and run_full_evaluation_suite.py, not hardcoded per-algorithm constants.
 
-    Each trained model (not rule_based, which has no learned parameters) is evaluated
-    across 4 independent training seeds (42/100/200/300, all already present as
-    `checkpoints/{model}_seed_{seed}.pt`) rather than a single seed=42 checkpoint, so
-    the reported safety score and resilience index are a mean +/- std across seeds --
-    one training run's outcome is not reported as if it were the only possible one.
+    Loads the "e500" checkpoints from scripts/run_training_budget_study.py (Phase 1):
+    500 training episodes with the curriculum Stage-2 seed-collapse bug fixed, not the
+    original 150-episode/pre-fix checkpoints (`checkpoints/{model}_seed_{seed}.pt`,
+    still present for the historical/pre-fix comparison the paper's Limitations
+    section discusses). Each trained model (not rule_based, which has no learned
+    parameters) is evaluated across 5 independent training seeds
+    (42/100/200/300/400, `checkpoints/e500_{model}_seed_{seed}.pt`) and 10 eval
+    seeds, matching the methodology that found marlin_twin significantly beats
+    rule_based at this budget (p=0.00018, Cohen's d=8.5) -- so the reported safety
+    score and resilience index are a mean +/- std across seeds, not one training
+    run's outcome reported as if it were the only possible one.
     """
     degradation_levels = [1.0, 0.8, 0.6, 0.4, 0.2, 0.0]
-    eval_seeds = [100, 101]
-    train_seeds = [42, 100, 200, 300]
+    eval_seeds = list(range(100, 110))
+    train_seeds = [42, 100, 200, 300, 400]
     models = ["marlin_twin", "independent_ppo", "maddpg", "sac", "rule_based"]
     model_labels = {
         "marlin_twin": "MARLIN-Twin (GAT)",
@@ -763,7 +769,7 @@ def render_fig9_benchmark_resilience() -> dict:
             if model == "rule_based":
                 return {i: RuleBasedCOLREGsController(i) for i in range(2)}
             pols = {i: _make_policy(model, n_vessels=2) for i in range(2)}
-            ckpt = os.path.join(REPO_ROOT, "checkpoints", f"{model}_seed_{train_seed}.pt")
+            ckpt = os.path.join(REPO_ROOT, "checkpoints", f"e500_{model}_seed_{train_seed}.pt")
             if os.path.exists(ckpt):
                 data = torch.load(ckpt, weights_only=True)
                 for i in range(2):
